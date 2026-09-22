@@ -11,14 +11,12 @@ function rotuloFonte(it) {
   if (it.viaLivre || it.livre) return 'puter :free';
   return it.src || '?';
 }
-
 /* ---------- abas ---------- */
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + t.dataset.v));
 });
 $('#b-cfg').onclick = () => document.querySelector('.tab[data-v="cfg"]').click();
-
 /* ---------- chat ---------- */
 const logEl = $('#log');
 function addMsg(who, txt, cls) {
@@ -40,7 +38,6 @@ function fmt(body) {
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_, l, c) => `<pre><code>${c.replace(/\n$/, '')}</code></pre>`)
     .replace(/`([^`\n]+)`/g, '<code>$1</code>');
 }
-
 const history = [];
 // memoria compartilhada (chats, abas, IAs e VMs): carrega e sincroniza sem travar a tela
 if (window.Memoria) {
@@ -56,7 +53,6 @@ if (window.Memoria) {
   } catch (e) {}
 }
 let busy = false;
-
 async function send() {
   const inp = $('#inp');
   const text = inp.value.trim();
@@ -135,7 +131,6 @@ async function send() {
       } catch (e) {}
     }
     $('#s-cur').textContent = r.model.split('/').pop().slice(0, 22);
-
     // se o modelo pediu uma ferramenta, executo e devolvo pra ele (ate 3 voltas)
     let txt = r.text, ultimo = out;
     for (let volta = 0; volta < 3; volta++) {
@@ -199,7 +194,6 @@ $('#inp').addEventListener('input', e => {
   e.target.style.height = 'auto';
   e.target.style.height = Math.min(e.target.scrollHeight, 180) + 'px';
 });
-
 /* ---------- catalogos ---------- */
 async function loadCatalogs() {
   $('#d-net').className = 'dot work';
@@ -231,7 +225,6 @@ $('#b-reload').onclick = () => {
   loadCatalogs();
 };
 $('#b-unban').onclick = () => { Breaker.clear(); refreshBan(); };
-
 /* ---------- config ---------- */
 $('#f-hf').value = LS.get('arkher_hf_token', '');
 $('#f-agent').value = LS.get('arkher_agent', '');
@@ -248,9 +241,14 @@ $('#b-saveagent').onclick = () => {
   setTimeout(() => $('#b-saveagent').innerHTML = icon('i-check') + 'Salvar', 1500);
   pingAgent();
 };
-/* voltou do Google? guarda a sessao ANTES de decidir se mostra o gate */
-try { if (window.AuthSocial) await AuthSocial.capturarRetorno(); } catch (e) {}
-
+/* voltou do Google? guarda a sessao ANTES de decidir se mostra o gate.
+   Sem await solto no topo: este arquivo entra como script classico
+   (<script src="ui.js">), onde top-level await e SyntaxError — o arquivo
+   inteiro morria no parse e a tela ficava vazia, so "carregando…". */
+const __capturaSocial = (async () => {
+  try { if (window.AuthSocial) return await AuthSocial.capturarRetorno(); } catch (e) {}
+  return false;
+})();
 const bGoo = $('#g-google');
 if (bGoo) {
   bGoo.onclick = async () => {
@@ -259,7 +257,6 @@ if (bGoo) {
   };
 }
 if (bGoo && (!window.AuthSocial || !AuthSocial.googleProvalvel())) bGoo.style.display = 'none';
-
 $('#b-login').onclick = async () => {
   if (typeof puter === 'undefined' || !puter.auth) { $('#s-who').textContent = 'puter.js nao carregou (internet/bloqueador). Recarregue a pagina.'; return; }
   try { await puter.auth.signIn(); $('#s-who').textContent = 'Conectado.'; loadCatalogs(); }
@@ -270,7 +267,6 @@ $('#b-who').onclick = async () => {
   try { const u = await puter.auth.getUser(); $('#s-who').textContent = 'Conta: ' + (u.username || u.email || '?'); }
   catch (e) { $('#s-who').textContent = 'Não conectado.'; }
 };
-
 /* ============================================================
    SANDBOX — terminal ligado ao agente do PC (Tailscale)
    ============================================================ */
@@ -283,9 +279,7 @@ put('ARKHER Sandbox — Windows via Tailscale', 'sys');
 put('Comandos: qualquer coisa do PowerShell/CMD.', 'sys');
 put('Prefixo "ia:" faz a IA escrever e executar o comando pra você.', 'sys');
 put('', 'sys');
-
 function agentURL() { return LS.get('arkher_agent', ''); }
-
 async function pingAgent() {
   const u = agentURL();
   const d = $('#d-rdp'), s = $('#s-rdp');
@@ -323,7 +317,6 @@ $('#b-save').onclick = () => {
   const a = el('a'); a.href = URL.createObjectURL(blob);
   a.download = 'arkher-sessao-' + Date.now() + '.txt'; a.click();
 };
-
 async function runCmd(cmd) {
   const u = agentURL();
   if (!u) { put('sem agente configurado (aba Config)', 'err'); return; }
@@ -386,9 +379,7 @@ async function runCmd(cmd) {
     if (comSync) Sync.soltarTrava();
   }
 }
-
 let termRT = null;   // conexao WS do terminal (reusada entre comandos)
-
 async function termSend() {
   const i = $('#cmd'); const v = i.value.trim();
   if (!v) return;
@@ -423,7 +414,6 @@ async function termSend() {
 }
 $('#b-run').onclick = termSend;
 $('#cmd').addEventListener('keydown', e => { if (e.key === 'Enter') termSend(); });
-
 /* ---------- integracoes ---------- */
 const INTEGRACOES = [
   ['Blender', 'renderizar / modelar 3D', 'blender --background --python-expr "import bpy; bpy.ops.mesh.primitive_cube_add()"'],
@@ -449,7 +439,6 @@ INTEGRACOES.forEach(([nm, ds, cmd]) => {
   };
   g.append(t);
 });
-
 /* ---------- boot ---------- */
 addMsg('ai', 'Pronto. Pergunte qualquer coisa — se um modelo falhar eu troco sozinho, '
   + 'primeiro pelo catálogo do Puter e depois pelo Hugging Face.\n\n'
@@ -457,7 +446,6 @@ addMsg('ai', 'Pronto. Pergunte qualquer coisa — se um modelo falhar eu troco s
 loadCatalogs();
 pingAgent();
 setInterval(pingAgent, 30000);
-
 /* ============================================================
    LOGIN
    ============================================================ */
@@ -487,7 +475,9 @@ setInterval(pingAgent, 30000);
   if(skip) skip.onclick=()=>{ LS.set('arkher_local',true); show(false); boot(); };
   window.__gate=show;
   (async()=>{
-    if(Auth.ativo()) return;                       // sessao valida
+    const voltou = await __capturaSocial;          // volta do Google? sessao ja guardada
+    if(voltou && Auth.ativo()) return boot();      // sessao recem-capturada: o boot la de baixo nao viu
+    if(Auth.ativo()) return;                       // sessao valida (ja deu boot no fim do arquivo)
     if(Auth.renovavel()){                          // expirou mas da pra renovar
       msg('renovando sessão…');
       if(await Auth.renovar()){ msg(''); return boot(); }
@@ -499,7 +489,6 @@ setInterval(pingAgent, 30000);
   // renova a sessao de tempos em tempos (o access_token do Supabase dura 1h)
   setInterval(()=>{ if(Auth.sess()) Auth.garantir(); }, 10*60*1000);
 })();
-
 /* ============================================================
    CAPACIDADES
    ============================================================ */
@@ -522,7 +511,6 @@ setInterval(pingAgent, 30000);
     }catch(e){ o.textContent='falhou: '+e.message; }
   };
 })();
-
 /* ============================================================
    3D — texto/imagem -> .glb (Shap-E, TripoSR...) no no conectado
    ============================================================ */
@@ -530,12 +518,10 @@ setInterval(pingAgent, 30000);
   let nos = [];           // [{nome,url,gpu,cuda,motores}]
   const log = t => { const e=$('#t3-log'); if(e){ e.textContent += (e.textContent?'\n':'') + t;
                      e.scrollTop = e.scrollHeight; } };
-
   function noAtual(){
     const n = $('#t3-node').value;
     return nos.find(x => x.nome === n) || nos[0] || null;
   }
-
   function pintarMotores(){
     const no = noAtual(); const cap = $('#t3-cap'); const sel = $('#t3-eng');
     if(!no){ cap.textContent='nenhum nó conectado — aba Config (URL do agente) ou VM (Kaggle/Android)'; return; }
@@ -552,7 +538,6 @@ setInterval(pingAgent, 30000);
       o.textContent = m.nome + (m.pronto ? '' : '  (precisa instalar)'); sel.appendChild(o); });
     sel.value = ms.some(m => m.id===atual) ? atual : 'auto';
   }
-
   async function sondar(){
     const cap = $('#t3-cap'); cap.textContent='procurando nós…';
     try{
@@ -567,10 +552,8 @@ setInterval(pingAgent, 30000);
       pintarMotores();
     }catch(e){ cap.textContent='falhou: ' + (window.errText?errText(e):e.message); }
   }
-
   $('#t3-ref').onclick = sondar;
   $('#t3-node').onchange = pintarMotores;
-
   $('#t3-setup').onclick = async()=>{
     const no = noAtual(); const o = $('#t3-out'); const motor = $('#t3-install').value;
     if(!no){ o.textContent='conecte um nó primeiro'; return; }
@@ -582,7 +565,6 @@ setInterval(pingAgent, 30000);
       await sondar();
     }catch(e){ o.textContent='falhou: ' + (window.errText?errText(e):e.message); }
   };
-
   $('#t3-go').onclick = async()=>{
     const o = $('#t3-out'); const p = $('#t3-p').value.trim();
     o.textContent=''; $('#t3-log').textContent='';
@@ -608,7 +590,6 @@ setInterval(pingAgent, 30000);
         o.appendChild(w); }
     }catch(e){ o.textContent='falhou: ' + (window.errText?errText(e):e.message); }
   };
-
   $('#t3-ls').onclick = async()=>{
     const o=$('#t3-files'); const no=noAtual();
     if(!no){ o.textContent='nenhum nó conectado'; return; }
@@ -625,12 +606,10 @@ setInterval(pingAgent, 30000);
       });
     }catch(e){ o.textContent='falhou: ' + (window.errText?errText(e):e.message); }
   };
-
   // se ja tem no salvo, mostra os motores assim que abrir a aba
   document.querySelectorAll('.tab').forEach(t => { if(t.dataset.v==='tri') t.addEventListener('click', () => { if(!nos.length) sondar(); }); });
   if(LS.get('arkher_agent','') || LS.get('arkher_kaggle','')) sondar();
 })();
-
 /* ============================================================
    VM
    ============================================================ */
@@ -674,7 +653,6 @@ setInterval(pingAgent, 30000);
   setInterval(()=>{ if($('#v-vm').classList.contains('on')) ref(); }, 15000);
   window.__vmref=ref;
 })();
-
 /* ============================================================
    COFRE
    ============================================================ */
@@ -701,7 +679,6 @@ setInterval(pingAgent, 30000);
   window.__vaultdraw=draw;
   draw();
 })();
-
 /* boot pos-login */
 function boot(){
   loadCatalogs(); pingAgent();
@@ -709,14 +686,12 @@ function boot(){
   if(window.__vaultdraw) window.__vaultdraw();
 }
 if(Auth.ativo()) boot();
-
 /* ============================================================
    EQUIPE — VM compartilhada entre as contas
    ============================================================ */
 (function(){
   if (typeof Sync === 'undefined') return;
   const msg=t=>{ const m=$('#crew-msg'); if(m) m.textContent=t; };
-
   async function puxar(){
     if(!Sync.ligado()) return;
     try{
@@ -742,7 +717,6 @@ if(Auth.ativo()) boot();
       }
     }catch(e){}
   }
-
   const campoNick = $('#crew-nick');
   if (campoNick) {
     campoNick.value = Sync.apelido();
@@ -752,7 +726,6 @@ if(Auth.ativo()) boot();
       Sync.bater();
     };
   }
-
   $('#crew-pub').onclick=async()=>{
     const u=LS.get('arkher_agent','');
     if(!u){ msg('configure a URL do agente em Config primeiro'); return; }
@@ -768,7 +741,6 @@ if(Auth.ativo()) boot();
       msg('usando a VM de '+vm.por); pingAgent();
     }catch(e){ msg('falhou: '+e.message); }
   };
-
   // registra na nuvem o que rodou na VM
   const _run=window.runCmd;
   if(typeof runCmd==='function'){
@@ -778,7 +750,6 @@ if(Auth.ativo()) boot();
       return orig(cmd);
     };
   }
-
   let iniciado=false;
   async function iniciar(){
     if(iniciado||!Sync.ligado()) return;
@@ -792,7 +763,6 @@ if(Auth.ativo()) boot();
   setInterval(iniciar, 5000);    // pega o momento em que o usuario loga
   window.__crew=puxar;
 })();
-
 /* ===== PILOTO: IA opera a VM vendo a tela ===== */
 (function () {
   const $ = s => document.querySelector(s);
@@ -800,7 +770,6 @@ if(Auth.ativo()) boot();
   const log = $('#pl-log'), st = $('#pl-st'), dot = $('#pl-dot');
   if (!view) return;
   let vivo = null, rodando = false, escala = 0.5;
-
   function diz(cls, txt, passo) {
     const d = document.createElement('div');
     d.className = 'pl-msg ' + (cls || '');
@@ -810,7 +779,6 @@ if(Auth.ativo()) boot();
   }
   function estado(t, on) { st.textContent = t; dot.classList.toggle('on', !!on); }
   function pinta(src) { if (!src) return; img.src = src; img.style.display = 'block'; vazio.style.display = 'none'; }
-
   async function tela() {
     try {
       const r = await Pilot.vm('/screen?scale=' + escala + '&q=55');
@@ -819,7 +787,6 @@ if(Auth.ativo()) boot();
     } catch (e) { estado(Pilot.base() ? 'agente offline' : 'sem URL do agente (Config)', false); }
     return false;
   }
-
   $('#pl-refresh').onclick = tela;
   $('#pl-live').onclick = function () {
     if (vivo) { clearInterval(vivo); vivo = null; this.textContent = 'Ao vivo'; estado('pausado', false); }
@@ -827,14 +794,12 @@ if(Auth.ativo()) boot();
   };
   $('#pl-open-rbx').onclick = () => abrir('roblox');
   $('#pl-open-bl').onclick = () => abrir('blender');
-
   async function abrir(nome) {
     diz('act', 'abrindo ' + nome + '…');
     try { const r = await Pilot.abrir(nome); if (r.img) pinta(r.img);
           diz(r.ok ? 'done' : 'err', r.ok ? nome + ' aberto' : 'falhou: ' + r.err); }
     catch (e) { diz('err', e.message); }
   }
-
   /* clique direto na imagem controla o mouse da VM */
   let realW = 0, realH = 0;
   img.onclick = async ev => {
@@ -847,11 +812,9 @@ if(Auth.ativo()) boot();
     try { await Pilot.vm('/input', { acts: [{ do: 'click', x, y }] }); } catch (e) { diz('err', e.message); }
     setTimeout(tela, 500);
   };
-
   document.querySelectorAll('.chip-ex').forEach(b => b.onclick = () => {
     $('#pl-inp').value = b.textContent; $('#pl-inp').focus();
   });
-
   async function go() {
     const obj = $('#pl-inp').value.trim();
     if (!obj || rodando) return;
@@ -859,13 +822,11 @@ if(Auth.ativo()) boot();
     diz('me', obj);
     rodando = true; $('#pl-stop').style.display = ''; $('#pl-go').disabled = true;
     if (vivo) { clearInterval(vivo); vivo = null; $('#pl-live').textContent = 'Ao vivo'; }
-
     // trava compartilhada: pegarTrava devolve null se e sua, ou {who} se OUTRA pessoa esta usando
     let dono = null;
     try { if (window.Sync && Sync.ligado()) dono = await Sync.pegarTrava(600); } catch (e) {}
     if (dono) { diz('err', 'VM ocupada por ' + String(dono.who).split('@')[0] + ' — aguarde'); fim(); return; }
     try { if (window.Sync && Sync.ligado()) Sync.log('piloto', obj.slice(0, 120)); } catch (e) {}
-
     try {
       await Pilot.correr(obj, ev => {
         if (ev.tipo === 'tela') { pinta(ev.img); estado('passo ' + ev.passo, true); }
@@ -879,24 +840,20 @@ if(Auth.ativo()) boot();
     } catch (e) { diz('err', e.message); }
     fim();
   }
-
   function fim() {
     rodando = false; $('#pl-stop').style.display = 'none'; $('#pl-go').disabled = false;
     try { if (window.Sync && Sync.soltarTrava) Sync.soltarTrava(); } catch (e) {}
     tela();
   }
-
   $('#pl-stop').onclick = () => { Pilot.parar = true; diz('', 'parando após o passo atual…'); };
   $('#pl-go').onclick = go;
   $('#pl-inp').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); go(); }
   });
-
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
     if (t.dataset.v === 'pilot' && img.style.display === 'none') tela();
   }));
 })();
-
 /* ===== DIAGNOSTICO: traduz "Failed to fetch" pro motivo real ===== */
 (function () {
   window.explicarFetch = function (e, url) {
@@ -915,7 +872,6 @@ if(Auth.ativo()) boot();
     return 'Nao alcancei ' + url + '. Verifique: (1) Tailscale ligado nos dois lados, ' +
            '(2) o workflow ainda esta rodando, (3) o IP mudou (cada sessao gera um novo).';
   };
-
   // avisa assim que a pagina abre, se o cenario for o do bloqueio
   document.addEventListener('DOMContentLoaded', function () {
     if (location.protocol !== 'https:') return;
@@ -936,12 +892,10 @@ if(Auth.ativo()) boot();
     const x = b.querySelector('#x-mix'); if (x) x.onclick = () => b.remove();
   });
 })();
-
 /* ===== MODELO FIXO, ARMAZEM, KAGGLE, RESET ===== */
 (function () {
   const $ = s => document.querySelector(s);
   let todos = [];
-
   /* ---- escolher modelo ---- */
   async function carregarTodos() {
     if (todos.length) return todos;
@@ -988,7 +942,6 @@ if(Auth.ativo()) boot();
     const f = LS.get('arkher_modelo', '');
     $('#mm-cur').textContent = f ? f.replace(/^hf:/, '') : 'automatico';
   }
-
   /* ---- armazem de contas ---- */
   async function pintarPool() {
     const el = $('#pl-list'); if (!el || !window.Pool) return;
@@ -1010,7 +963,6 @@ if(Auth.ativo()) boot();
     };
     pintarPool();
   }
-
   /* ---- Kaggle ---- */
   if ($('#b-kaggle-save')) {
     $('#f-kaggle').value = LS.get('arkher_kaggle', '');
@@ -1034,7 +986,6 @@ if(Auth.ativo()) boot();
       a.href = 'arkher_kaggle.ipynb'; a.download = 'arkher_kaggle.ipynb'; a.click();
     };
   }
-
   /* ---- reset ---- */
   if ($('#b-reset')) {
     $('#b-reset').onclick = () => {
@@ -1056,7 +1007,6 @@ if(Auth.ativo()) boot();
     };
   }
 })();
-
 /* ===== NO ANDROID ===== */
 (function () {
   const $ = s => document.querySelector(s);
@@ -1082,13 +1032,10 @@ if(Auth.ativo()) boot();
     } finally { clearTimeout(t); }
   };
 })();
-
-
 /* ===== CONTAS PUTER: capturar / trocar / girar ===== */
 (function () {
   const $ = s => document.querySelector(s);
   if (!$('#pu-cap')) return;
-
   async function pintar() {
     if (!window.Pool) return;
     const o = await Pool.ler(true), n = Date.now();
@@ -1146,7 +1093,6 @@ if(Auth.ativo()) boot();
       pintar();
     };
   }
-
   /* ---- quem paga: user-pays (padrão) ou cota do dono ---- */
   const selModo = $('#pl-modo'), hintModo = $('#pl-modo-hint');
   function pintarModo() {
@@ -1171,7 +1117,6 @@ if(Auth.ativo()) boot();
       + 'por qualquer consumo.';
   }
   window.pintarUPG = pintarUPG;
-
   /* Painel UPG: numeros anonimos do site + o convite honesto.
      O que o convite faz de verdade: traz gente nova, e cada pessoa nova
      usa a PROPRIA conta (mais gente atendida ao mesmo tempo). Ele NAO
@@ -1229,7 +1174,6 @@ if(Auth.ativo()) boot();
       + 'conta para outra: nenhuma tela vai dizer "sua cota aumentou", porque isso não acontece.';
   }
   window.pintarPainelUPG = pintarPainelUPG;
-
   /* lê o medidor de cada conta — só leitura, sem mover nada */
   async function pintarQuota() {
     const el = $('#upg-quota-linhas'); if (!el || !window.Pool || !Pool.quota) return;
@@ -1255,7 +1199,6 @@ if(Auth.ativo()) boot();
   }
   window.pintarQuota = pintarQuota;
   const btnQ = $('#upg-quota'); if (btnQ) btnQ.onclick = pintarQuota;
-
   /* ---- MEGA PACK + COFRE NEURAL ---- */
   async function pintarPack() {
     const el = $('#mp-num'); if (!el || !window.MegaPack) return;
@@ -1271,7 +1214,6 @@ if(Auth.ativo()) boot();
     } catch (e) { el.textContent = 'não deu para ler: ' + (e.message || e); }
   }
   window.pintarPack = pintarPack;
-
   const bnMp = $('#mp-ver'); if (bnMp) bnMp.onclick = pintarPack;
   const bMpAdd = $('#mp-add');
   if (bMpAdd) bMpAdd.onclick = async () => {
@@ -1309,7 +1251,6 @@ if(Auth.ativo()) boot();
     $('#mp-st').textContent = 'docs limpos';
     await pintarPack();
   };
-
   /* ---- INGESTÃO CONTÍNUA: fila que trabalha sozinha (custo de IA zero) ---- */
   function pintarDin() {
     const el = $('#din-st'); if (!el || !window.Dinamico) return;
@@ -1320,7 +1261,6 @@ if(Auth.ativo()) boot();
       + (s.ultimo ? ' · última rodada ' + s.ultimo.slice(11, 19) : '');
   }
   window.pintarDin = pintarDin;
-
   const dinVer = $('#din-ver'); if (dinVer) dinVer.onclick = pintarDin;
   const dinAdd = $('#din-add');
   if (dinAdd) dinAdd.onclick = () => {
@@ -1347,7 +1287,6 @@ if(Auth.ativo()) boot();
   const dinOff = $('#din-off'); if (dinOff) dinOff.onclick = () => { Dinamico.desligar(); pintarDin(); };
   const dinLim = $('#din-limpar');
   if (dinLim) dinLim.onclick = () => { if (confirm('Limpar a fila e a lista de visitadas?')) { Dinamico.limpar(); pintarDin(); } };
-
   /* ---- OPERÁRIOS: a cota gratuita ociosa trabalhando no cofre ---- */
   function pintarOp() {
     const el = $('#op-st'); if (!el || !window.Operarios) return;
@@ -1361,7 +1300,6 @@ if(Auth.ativo()) boot();
       + (s.seca ? ' · <b>cota seca, esperando o reset</b>' : '');
   }
   window.pintarOp = pintarOp;
-
   const opVer = $('#op-ver'); if (opVer) opVer.onclick = pintarOp;
   const opRodar = $('#op-rodar');
   if (opRodar) opRodar.onclick = async () => {
@@ -1374,7 +1312,6 @@ if(Auth.ativo()) boot();
   const opOn = $('#op-on');
   if (opOn) opOn.onclick = () => { Operarios.ligar(60, t => { const el = $('#op-st'); if (el) el.textContent = t; }); pintarOp(); };
   const opOff = $('#op-off'); if (opOff) opOff.onclick = () => { Operarios.desligar(); pintarOp(); };
-
   /* ---- WORKER: busca passiva (CPU + RAM, custo zero) ---- */
   const wkBaixar = $('#wk-baixar');
   if (wkBaixar) wkBaixar.onclick = () => {
@@ -1396,7 +1333,6 @@ if(Auth.ativo()) boot();
          + r.links + ' link(s) na fila · <b>cota de IA usada: 0</b>')
       : r.err;
   };
-
   /* ---- as duas cotas, lado a lado, com a direção entre elas ---- */
   async function pintarCotas() {
     const el = $('#ct-num'); if (!el || !window.Cotas) return;
@@ -1422,7 +1358,6 @@ if(Auth.ativo()) boot();
       + 'vão junto num pedido ao Puter: isso é verificado em <code>teste_cotas.js</code>.</span>';
   }
   window.pintarCotas = pintarCotas;
-
   /* colar vários provedores de uma vez */
   const bVarios = $('#pp-varios-add');
   if (bVarios) bVarios.onclick = () => {
@@ -1438,7 +1373,6 @@ if(Auth.ativo()) boot();
     }
   };
   const btnCt = $('#ct-ver'); if (btnCt) btnCt.onclick = pintarCotas;
-
   const btnAt = $('#upg-atualizar'); if (btnAt) btnAt.onclick = () => { pintarPainelUPG(); pintarQuota(); pintarCotas(); if (window.pintarUso) pintarUso(); };
   const btnCp = $('#upg-copiar'); if (btnCp) btnCp.onclick = () => {
     const inp = $('#upg-link'); if (!inp) return;
@@ -1453,9 +1387,7 @@ if(Auth.ativo()) boot();
       history.replaceState({}, '', location.pathname);
     }
   } catch (e) {}
-
   pintarPainelUPG();
-
   if (selModo) {
     selModo.onchange = () => { Pool.modo(selModo.value); pintarModo(); pintar(); pintarUPG(); };
     const cAdm = $('#pl-admin');
@@ -1473,7 +1405,6 @@ if(Auth.ativo()) boot();
     pintarUPG();
     if (window.pintarPainelUPG) pintarPainelUPG();
   }
-
   /* ---- "testar as contas": responde por que todas caíram juntas ---- */
   const bdiag = $('#pu-diag');
   if (bdiag) bdiag.onclick = async () => {
@@ -1486,7 +1417,6 @@ if(Auth.ativo()) boot();
       + '<br><br><b>Diagnóstico:</b> ' + r.diagnostico;
     pintar();
   };
-
   const bcheck = $('#pu-check');
   if (bcheck) bcheck.onclick = async () => {    const g = $('#pu-grana'); if (g) g.textContent = 'checando…';
     const v = await Puter.saldo();
@@ -1502,7 +1432,6 @@ if(Auth.ativo()) boot();
     $('#pu-st').textContent = 'marcas limpas: o Puter volta a usar o catálogo inteiro (contas com crédito).';
     pintar();
   };
-
   $('#pu-cap').onclick = async () => {
     $('#pu-st').textContent = 'capturando…';
     const r = await Pool.capturarPuter();
@@ -1522,14 +1451,12 @@ if(Auth.ativo()) boot();
   };
   pintar();
 })();
-
 /* ===== PROVEDORES GRATIS (freeai.js) — chaves, testes, modo de gasto =====
    Isto é a resposta prática ao "low balance" do Puter: cada provedor aqui
    tem cota gratuita própria. Duas ou três chaves = o chat não para mais. */
 (function () {
   const $ = s => document.querySelector(s);
   if (!$('#fr-list') || typeof Free === 'undefined') return;
-
   function linha(p) {
     const d = document.createElement('div');
     d.style.cssText = 'border:1px solid var(--lin,#2a2a2a);border-radius:9px;padding:8px 10px;margin:8px 0';
@@ -1538,7 +1465,6 @@ if(Auth.ativo()) boot();
     const nome = document.createElement('b'); nome.style.fontSize = '12.5px'; nome.textContent = p.nome;
     const lim = document.createElement('span'); lim.className = 'hint'; lim.style.margin = '0'; lim.textContent = p.gratis;
     top.append(nome, lim);
-
     const row = document.createElement('div'); row.className = 'row'; row.style.margin = '6px 0';
     const inp = document.createElement('input'); inp.className = 'fr-tok'; inp.placeholder = p.chave;
     inp.style.flex = '1'; inp.style.minWidth = '160px'; inp.setAttribute('aria-label', 'chave ' + p.nome);
@@ -1551,18 +1477,14 @@ if(Auth.ativo()) boot();
       bRm.onclick = () => { Free.removerProprio(p.id); delete linhas[p.id]; montarLinhas(); pintar(); loadCatalogs(); };
       row.append(bRm);
     }
-
     const lista = document.createElement('div'); lista.className = 'hint'; lista.style.marginTop = '4px';
     const st = document.createElement('div'); st.className = 'hint fr-st'; st.dataset.prov = p.id;
-
     const link = document.createElement('div'); link.className = 'hint';
     link.innerHTML = 'Pegue a chave em <a href="' + p.site + '" target="_blank" rel="noopener">'
       + p.site.replace(/^https?:\/\//, '') + '</a>. '
       + (p.visao ? 'Enxerga imagem. ' : '')
       + (p.local ? 'Roda na sua máquina: sem chave e sem internet. ' + (p.dica || '') : 'Dá para colar várias chaves de uma vez (uma por linha): o ARKHER gira entre elas.');
-
     d.append(top, row, lista, st, link);
-
     bAdd.onclick = async () => {
       const r = Free.add(p.id, inp.value);
       if (!r.ok) { st.textContent = r.err || 'não deu'; return; }
@@ -1581,7 +1503,6 @@ if(Auth.ativo()) boot();
       catch (e) { st.textContent = 'falhou: ' + errText(e); }
       pintar();
     };
-
     lista._pintar = () => {
       const ks = Free.chaves(p.id);
       lista.innerHTML = ks.length
@@ -1591,7 +1512,6 @@ if(Auth.ativo()) boot();
     d._lista = lista;
     return d;
   }
-
   const box = $('#fr-list');
   const linhas = {};
   function montarLinhas() {
@@ -1599,7 +1519,6 @@ if(Auth.ativo()) boot();
     for (const p of Free.provs()) { const l = linha(p); linhas[p.id] = l; box.append(l); }
   }
   montarLinhas();
-
   function pintar() {
     const C = Free.capacidade();
     const porProv = {};
@@ -1643,7 +1562,6 @@ if(Auth.ativo()) boot();
   window.pintarGratis = pintar;
   pintar();
   pintarUso();
-
   $('#fr-reload').onclick = () => { Free.esquecer(); loadCatalogs(); };
   $('#fr-testall').onclick = async () => {
     const alvos = Free.prontos();
@@ -1658,7 +1576,6 @@ if(Auth.ativo()) boot();
     $('#fr-st').textContent = out.join(' · ');
     pintar();
   };
-
   /* --- adicionar provedor proprio ao hub --- */
   const ppAdd = $('#pp-add');
   if (ppAdd) {
@@ -1696,7 +1613,6 @@ if(Auth.ativo()) boot();
       montarLinhas(); pintar();
     };
   }
-
   /* --- medidor do dia: quanto foi na ponta e quanto foi gratis ---
      É o numero que mostra se o roteador esta funcionando: se "gratis" for
      muito maior que "ponta", o credito dura muito mais.                     */
@@ -1715,7 +1631,6 @@ if(Auth.ativo()) boot();
       + '<br>Quem paga agora: <b>' + (typeof Puter.deQuem === 'function' ? Puter.deQuem() : '?') + '</b>';
   }
   window.pintarUso = pintarUso;
-
   /* --- modo de gasto + teto de tokens --- */
   const md = $('#ec-modo');
   if (md) {
@@ -1731,12 +1646,10 @@ if(Auth.ativo()) boot();
     };
   }
 })();
-
 /* ===== AUTO-CONFIG: detecta contas sem clique ===== */
 (function () {
   const $ = s => document.querySelector(s);
   if (!window.Pool || !Pool.auto) return;
-
   function toast(txt) {
     let t = $('#ark-toast');
     if (!t) {
@@ -1752,7 +1665,6 @@ if(Auth.ativo()) boot();
     clearTimeout(t._x);
     t._x = setTimeout(() => { t.style.display = 'none'; }, 6000);
   }
-
   async function rodar() {
     try {
       const r = await Pool.auto(toast);
@@ -1770,7 +1682,6 @@ if(Auth.ativo()) boot();
       }
     } catch (e) {}
   }
-
   // roda no load, depois do login, e vigia troca de conta
   setTimeout(rodar, 1500);
   Pool.onMudou = rodar;          // atualiza o chip na hora que troca a conta
@@ -1780,13 +1691,11 @@ if(Auth.ativo()) boot();
   const bp = $("#b-login");
   if (bp) bp.addEventListener('click', () => setTimeout(rodar, 3000));
 })();
-
 /* ===== Game dev: o loop verificado (gera, roda, le o erro, conserta) ===== */
 (function () {
   const $ = s => document.querySelector(s);
   const logEl = $('#gd-log'), est = $('#gd-estado');
   if (!logEl || !window.GD) return;
-
   function diz(t) { est.textContent = t; }
   function log(t, cls) {
     const d = document.createElement('div');
@@ -1797,7 +1706,6 @@ if(Auth.ativo()) boot();
   }
   let parado = false;
   $('#gd-parar').onclick = () => { parado = true; diz('parando depois desta rodada…'); };
-
   function pintaPasso(p) {
     if (p.tipo === 'rodada') log('— rodada ' + p.n + ' de ' + p.de + ' —', 'r');
     else if (p.tipo === 'codigo') log('escreveu: ' + (p.arquivos || []).join(', ') + (p.explica ? (' · ' + p.explica) : ''));
@@ -1814,7 +1722,6 @@ if(Auth.ativo()) boot();
     else if (p.tipo === 'aviso') log('aviso: ' + (p.txt || ''));
     else if (p.tipo === 'fim') log(p.ok ? 'PRONTO: rodou limpo' : ('parei: ' + (p.motivo || '')), p.ok ? 'o' : 'e');
   }
-
   $('#gd-rodar').onclick = async function () {
     const objetivo = String($('#gd-objetivo').value || '').trim();
     const motor = $('#gd-motor').value;
@@ -1844,16 +1751,13 @@ if(Auth.ativo()) boot();
     } finally { this.disabled = false; GD.__rodando = ''; }
   };
 })();
-
 /* ===== Publicar e telemetria: o jogo no ar e vivo ===== */
 (function () {
   const $ = s => document.querySelector(s);
   const out = $('#pb-out'), codigo = $('#pb-codigo'), listaVer = $('#pb-versoes');
   if (!out || !window.Publicar) return;
   const P = Publicar;
-
   function texto(t, ruim) { out.textContent = t; out.style.color = ruim ? '#ff9b9b' : ''; }
-
   /* ---- campos ---- */
   const repo = $('#pb-repo'), key = $('#pb-rbx-key'), ids = $('#pb-ids'),
         tel = $('#pb-tel'), jogo = $('#pb-jogo');
@@ -1863,27 +1767,23 @@ if(Auth.ativo()) boot();
   if (ids) ids.value = (cfg.universo && cfg.lugar) ? (cfg.universo + ':' + cfg.lugar) : '';
   if (tel) tel.value = cfg.tel;
   if (jogo) jogo.value = cfg.jogo;
-
   function colher() {
     const par = String(ids && ids.value || '').trim().split(':');
     const c = { repo: repo && repo.value, rbxKey: key && key.value, tel: tel && tel.value,
                 jogo: jogo && jogo.value, universo: (par[0] || '').trim(), lugar: (par[1] || '').trim() };
     return P.salvar(c);
   }
-
   $('#pb-salvar').onclick = () => {
     const c = colher();
     texto('salvo: ' + (c.repo || 'sem repositorio') + ' · telemetria ' + (c.tel || 'sem endereco') +
       ' · jogo ' + (c.jogo || 'sem nome') + (c.rbxKey ? ' · chave do Roblox guardada' : ' · sem chave do Roblox'));
   };
-
   $('#pb-snippet').onclick = () => {
     const c = colher();
     codigo.style.display = 'block';
     codigo.textContent = P.snippet(c.tel, c.jogo);
     texto('copie o codigo acima para um Script do servidor no Studio');
   };
-
   $('#pb-gh').onclick = async function () {
     const c = colher();
     if (!c.repo) return texto('preencha o repositorio primeiro (dono/repositorio)', true);
@@ -1909,7 +1809,6 @@ if(Auth.ativo()) boot();
         ') · ' + b.caminho + ' (' + b.commit + ')');
     } finally { this.disabled = false; this.textContent = t; }
   };
-
   const arq = $('#pb-rbx-arq');
   if (arq) arq.onchange = async function () {
     const c = colher();
@@ -1923,7 +1822,6 @@ if(Auth.ativo()) boot();
     if (!r.ok) return texto('Roblox: ' + r.motivo + (r.o_que_fazer ? ' — ' + r.o_que_fazer : ''), true);
     texto('publicado no Roblox: versao ' + (r.versao || '?') + (r.url ? ' · ' + r.url : ''));
   };
-
   $('#pb-tel-ver').onclick = async function () {
     const c = colher();
     this.disabled = true; const t = this.textContent; this.textContent = 'lendo...';
@@ -1946,7 +1844,6 @@ if(Auth.ativo()) boot();
         : 'sem sugestoes ainda';
     } finally { this.disabled = false; this.textContent = t; }
   };
-
   $('#pb-marcar').onclick = async function () {
     const c = colher();
     this.disabled = true; const t = this.textContent; this.textContent = 'marcando...';
@@ -1959,7 +1856,6 @@ if(Auth.ativo()) boot();
       pintarVersoes();
     } finally { this.disabled = false; this.textContent = t; }
   };
-
   function pintarVersoes() {
     if (!listaVer) return;
     const l = P.versoes();
@@ -1970,7 +1866,6 @@ if(Auth.ativo()) boot();
     d.textContent = 'versoes marcadas: ' + l.map(v => v.versao + (v.resumo ? '(' + (v.resumo.eventos || 0) + ')' : '(sem dado)')).join(' · ');
     listaVer.appendChild(d);
   }
-
   $('#pb-comparar').onclick = () => {
     const l = P.versoes();
     if (l.length < 2) return texto('preciso de duas versoes marcadas para comparar', true);
@@ -1978,17 +1873,14 @@ if(Auth.ativo()) boot();
     if (!r.ok) return texto('comparar: ' + r.motivo, true);
     texto('de ' + r.de + ' para ' + r.para + ': ' + r.texto);
   };
-
   pintarVersoes();
 })();
-
 /* ===== Ligar tudo: um lugar so para ligar no, DsOS, piloto e tokens ===== */
 (function () {
   const $ = s => document.querySelector(s);
   const corpo = $('#lg-corpo');
   if (!corpo || !window.Ligar) return;
   const resumo = $('#lg-resumo'), passos = $('#lg-passos');
-
   function linhas() {
     corpo.innerHTML = '';
     Ligar.pontos.forEach(p => {
@@ -2019,7 +1911,6 @@ if(Auth.ativo()) boot();
       corpo.appendChild(l);
     });
   }
-
   function pintarResultado(r) {
     r.lista.forEach(x => {
       const l = corpo.querySelector('[data-st="' + x.id + '"]');
@@ -2038,7 +1929,6 @@ if(Auth.ativo()) boot();
       passos.innerHTML = r.passos.map(t => '· ' + t).join('<br>');
     } else if (passos) passos.style.display = 'none';
   }
-
   $('#lg-testar').onclick = async function () {
     this.disabled = true; const t = this.textContent; this.textContent = 'testando...';
     try {
@@ -2047,7 +1937,6 @@ if(Auth.ativo()) boot();
     } catch (e) { resumo.textContent = 'erro ao testar: ' + e.message; }
     finally { this.disabled = false; this.textContent = t; }
   };
-
   $('#lg-ligar').onclick = async function () {
     this.disabled = true; const t = this.textContent; this.textContent = 'ligando...';
     try {
@@ -2056,10 +1945,8 @@ if(Auth.ativo()) boot();
     } catch (e) { resumo.textContent = 'erro ao ligar: ' + e.message; }
     finally { this.disabled = false; this.textContent = t; }
   };
-
   linhas();
 })();
-
 /* ===== DsOS remoto: o site e so a tela + o controle ===== */
 (function () {
   const $ = s => document.querySelector(s);
@@ -2067,16 +1954,13 @@ if(Auth.ativo()) boot();
   const off = $('#dsr-off'), st = $('#dsr-st'), dot = $('#dsr-dot'),
         hwEl = $('#dsr-hw'), fpsEl = $('#dsr-fps'), msg = $('#dsr-msg'),
         draw = $('#dsr-draw'), drawT = $('#dsr-draw-t'), drawB = $('#dsr-draw-b');
-
   function estado(t, on) { st.textContent = t; dot.classList.toggle('on', !!on); }
   function mostrarTela(v) {
     img.style.display = v ? 'block' : 'none';
     off.style.display = v ? 'none' : 'block';
   }
-
   const inp = $('#dsr-url');
   if (inp) inp.value = DsC.url();
-
   async function conectar() {
     const u = normUrl(inp.value);
     if (!u) { msg.textContent = 'Cole o endereco que o DsOS imprimiu.'; return; }
@@ -2099,7 +1983,6 @@ if(Auth.ativo()) boot();
       msg.textContent = 'Nao consegui falar com o DsOS: ' + (window.explicarFetch ? explicarFetch(e, u) : e.message);
     }
   }
-
   /* linha de estado: fps · latencia · qualidade · resolucao transmitida */
   function pintaLinha(fps, ms) {
     const q = DsC.qual === 'auto' ? ('auto:' + DsC._nivel) : DsC.qual;
@@ -2107,335 +1990,4 @@ if(Auth.ativo()) boot();
       q + ' · ' + (DsC.stream.escala || 100) + '%' +
       (DsC.cursor.modo === 'mouse' ? ' · mouse' : ' · toque');
   }
-
-  function iniciar() {
-    mostrarTela(true);
-    DsC.ligarVista(img, $('#dsr-zoom'), $('#dsr-cursor'));
-    DsC.ligarEntrada(img, $('#dsr-zoom'));
-    DsC.setQualidade(DsC.qual);
-    DsC.iniciarStream(img,
-      err => { estado('tela indisponivel', false); msg.textContent = err; mostrarTela(false); },
-      (fps, ms) => { pintaLinha(fps, ms); pintaGirar(); });
-  }
-
-  $('#dsr-go').onclick = conectar;
-  $('#dsr-cfg2').onclick = () => { DsC.pararStream(); mostrarTela(false); };
-
-  /* ---------- controles da tela: mouse/toque, encaixe, zoom, qualidade ---------- */
-  const bCursor = $('#dsr-mouse'), bFit = $('#dsr-fit'), selQ = $('#dsr-q');
-  function pintaBotaoCursor() {
-    if (bCursor) bCursor.textContent = DsC.cursor.modo === 'mouse' ? 'Mouse ✓' : 'Mouse';
-  }
-  function pintaBotaoFit() { if (bFit) bFit.textContent = DsC.rotuloVista(DsC.vista.modo); }
-  if (bCursor) bCursor.onclick = () => {
-    DsC.setCursorModo(DsC.cursor.modo === 'mouse' ? 'toque' : 'mouse');
-    pintaBotaoCursor(); pintaLinha();
-    if (DsC.cursor.modo === 'mouse')
-      msg.textContent = 'Cursor de mouse ligado: arraste o dedo para mover, toque curto = clique, toque longo = botao direito. Dois dedos = mover a tela/zoom.';
-  };
-  if (bFit) bFit.onclick = () => { DsC.cicloVista(); pintaBotaoFit(); };
-  if (selQ) { selQ.value = DsC.qual; selQ.onchange = () => { DsC.setQualidade(selQ.value); pintaLinha(); }; }
-  const bZmais = $('#dsr-zp'), bZmenos = $('#dsr-zm');
-  if (bZmais) bZmais.onclick = () => DsC.zoom(1.25);
-  if (bZmenos) bZmenos.onclick = () => DsC.zoom(0.8);
-  /* tela cheia: usar Studio/Blender sem a barra do site comendo a tela */
-  const bFull = $('#dsr-full'), avisoGirar = $('#dsr-girar');
-  function pintaFull() { if (bFull) bFull.textContent = DsC.emTelaCheia() ? 'Sair' : 'Tela'; }
-  if (bFull) bFull.onclick = async () => {
-    const r = await DsC.telaCheia();
-    if (!r.ok && msg) msg.textContent = r.erro;
-    pintaFull();
-  };
-  if (avisoGirar) {
-    const bx = $('#dsr-girar-x');
-    if (bx) bx.onclick = async () => {
-      const r = await DsC.travarPaisagem();
-      if (msg) msg.textContent = r.ok ? 'deitado e travado em paisagem' : r.erro;
-    };
-  }
-  function pintaGirar() {
-    if (avisoGirar) avisoGirar.style.display = DsC.precisaGirar() ? 'flex' : 'none';
-  }
-  if (window.addEventListener) window.addEventListener('orientationchange', () => setTimeout(() => { pintaGirar(); DsC.recalcular(); }, 250));
-  if (document.addEventListener) document.addEventListener('fullscreenchange', pintaFull);
-  pintaFull();
-
-  DsC.onQualidade = (n, p, motivo) => {
-    if (selQ && String(n).indexOf('auto') === 0) selQ.value = 'auto';
-    pintaLinha();
-    if (motivo && msg) msg.textContent = 'Qualidade ' + motivo;
-  };
-  DsC.onCursorModo = pintaBotaoCursor;
-  pintaBotaoCursor(); pintaBotaoFit();
-
-  $('#dsr-boot').onclick = async function () {
-    this.disabled = true; const txt = this.textContent; this.textContent = 'ligando...';
-    try {
-      const r = await DsC.boot();
-      if (r.ok) {
-        estado('desktop no ar · ' + (r.modo || ''), true);
-        if (r.faltando && r.faltando.length)
-          alert('DsOS subiu, mas faltam pacotes no backend: ' + r.faltando.join(', ') +
-                '\nInstale-os no notebook/workflow para tela e entrada completas.');
-        iniciar();
-      } else {
-        estado('nao subiu', false);
-        alert('Nao consegui subir a sessao grafica: ' + (r.erro || '?') +
-              (r.faltando ? '\nFaltando: ' + r.faltando.join(', ') : ''));
-      }
-    } catch (e) { alert('erro: ' + e.message); }
-    this.disabled = false; this.textContent = txt;
-  };
-
-  function abrirGaveta(titulo) { drawT.textContent = titulo; draw.style.display = 'flex'; }
-  $('#dsr-draw-x').onclick = () => { draw.style.display = 'none'; };
-
-  $('#dsr-apps').onclick = async () => {
-    abrirGaveta('Apps instalados'); drawB.innerHTML = '<p style="color:var(--dim);font-size:12px">lendo...</p>';
-    try {
-      const j = await DsC.apps();
-      const a = j.apps || [];
-      if (!a.length) {
-        drawB.innerHTML = '<p style="color:var(--dim);font-size:12px;line-height:1.6">' +
-          'Nenhum app grafico instalado neste backend.<br><br>' +
-          'Isso e real, nao um erro: o DsOS so lista o que existe de verdade na maquina. ' +
-          'Instale no notebook/workflow (ex: blender, xterm) e recarregue.</p>';
-        return;
-      }
-      drawB.innerHTML = '';
-      a.forEach(x => {
-        const d = document.createElement('div');
-        d.className = 'dsr-it';
-        d.innerHTML = '<svg class="ico"><use href="#i-cube"/></svg><span class="nm"></span>';
-        d.querySelector('.nm').textContent = x.nome;
-        d.onclick = async () => { await DsC.abrir(x.bin); draw.style.display = 'none'; };
-        drawB.appendChild(d);
-      });
-    } catch (e) { drawB.innerHTML = '<p style="color:#ff9b9b;font-size:12px">' + e.message + '</p>'; }
-  };
-
-  const hud = $('#hud');
-  $('#dsr-hud').onclick = () => {
-    hud.style.display = hud.style.display === 'none' ? 'block' : 'none';
-  };
-  hud.querySelectorAll('button[data-k]').forEach(b => {
-    b.onclick = e => { e.preventDefault(); DsC.tecla(b.dataset.k); };
-  });
-
-  $('#dsr-kb').onclick = () => {
-    const t = prompt('Texto para digitar no DsOS:');
-    if (t) DsC.texto(t);
-  };
-  // teclado fisico: clique na tela remota e digite
-  img.tabIndex = 0;
-  DsC.teclado(img);
-  img.addEventListener('mousedown', () => img.focus());
-
-  // reconecta sozinho se ja tinha endereco salvo
-  if (DsC.url()) setTimeout(conectar, 2000);
-})();
-
-/* ===== Compute Manager (item 17) + HUD configuravel (item 7) + gestos ===== */
-(function () {
-  const $ = s => document.querySelector(s);
-  if (!window.CM || !$('#cm-pane')) return;
-  const pane = $('#cm-pane'), corpo = $('#cm-b');
-
-  function tag(txt, ok) {
-    return '<span class="tg ' + (ok === true ? 'on' : ok === false ? 'off' : '') + '">' + txt + '</span>';
-  }
-
-  async function pintar() {
-    corpo.innerHTML = '<p style="color:var(--dim);font-size:12px">sondando backends...</p>';
-    const l = await CM.sondarTodos();
-    corpo.innerHTML = '';
-    l.forEach(b => {
-      const d = document.createElement('div');
-      d.className = 'cmb';
-      const c = b.cap || {}, cp = c.compat || {}, h = c.hw || {};
-      const on = b.online;
-      let tags = '';
-      if (on) {
-        tags += tag('Linux', !!(cp.linux || {}).ok);
-        tags += tag('Windows' + ((cp.windows || {}).via === 'wine' ? ' (Wine)' : ''), !!(cp.windows || {}).ok);
-        tags += tag('Android', !!(cp.android || {}).ok);
-        tags += tag('Tela', !!c.tela);
-        tags += tag('Entrada', !!c.entrada);
-        tags += tag('GPU CUDA', !!c.gpu_compute);
-      }
-      d.innerHTML =
-        '<div class="cmb-t"><span class="dot' + (on ? ' on' : '') + '"></span>' +
-        '<b></b><span class="grow"></span>' +
-        (b.tipo === 'browser' ? '' : '<button class="mini" data-rm="' + b.id + '">remover</button>') +
-        '</div>' +
-        '<div class="cmb-hw"></div>' +
-        '<div class="cmb-tags">' + tags + '</div>';
-      d.querySelector('b').textContent = b.nome;
-      d.querySelector('.cmb-hw').textContent = CM.resumo(b.id);
-      corpo.appendChild(d);
-    });
-    corpo.querySelectorAll('[data-rm]').forEach(b => {
-      b.onclick = () => { CM.remover(b.dataset.rm); pintar(); };
-    });
-
-    // onde cada tarefa vai cair AGORA
-    const box = document.createElement('div');
-    box.className = 'cmb';
-    let html = '<div class="cmb-t"><b>Para onde vai cada tarefa</b></div><div class="cmb-hw">';
-    Object.keys(CM.tarefas).forEach(k => {
-      const r = CM.rotear(k);
-      html += CM.tarefas[k].nome + ' &rarr; ' +
-        (r.ok ? '<span style="color:#8ae3ae">' + r.backend.nome + '</span>'
-              : '<span style="color:#ff9b9b">' + r.motivo + '</span>') + '<br>';
-    });
-    box.innerHTML = html + '</div>';
-    corpo.appendChild(box);
-  }
-
-  $('#dsr-cm').onclick = () => { pane.style.display = 'flex'; pintar(); };
-  $('#cm-x').onclick = () => { pane.style.display = 'none'; };
-  $('#cm-scan').onclick = pintar;
-  $('#cm-add').onclick = () => {
-    const n = $('#cm-nome').value.trim(), u = $('#cm-url').value.trim();
-    if (!n || !u) { alert('preencha nome e endereco'); return; }
-    CM.add(n, u); $('#cm-nome').value = ''; $('#cm-url').value = ''; pintar();
-  };
-
-  // o endereco do DsOS conectado alimenta o backend correspondente
-  if (window.DsC && DsC.url()) {
-    const l = CM.lista();
-    const alvo = l.find(b => b.tipo === 'dsos' && !b.url);
-    if (alvo) CM.setUrl(alvo.id, DsC.url());
-  }
-
-  /* ---------- HUD configuravel ---------- */
-  const hud = $('#hud');
-  const CH = 'dsos_hud';
-  function carregar() {
-    return (window.LS ? LS.get(CH, null) : null) ||
-      [{ k: 'Up', r: '\u25B2' }, { k: 'Left', r: '\u25C0' }, { k: 'Right', r: '\u25B6' },
-       { k: 'Down', r: '\u25BC' }, { k: 'Return', r: 'OK' }, { k: 'Escape', r: 'ESC' },
-       { k: 'Tab', r: 'TAB' }, { k: 'super', r: 'MENU' }, { k: 'BackSpace', r: '\u232B' }];
-  }
-  function salvar(l) { if (window.LS) LS.set(CH, l); }
-
-  function montarHud() {
-    const l = carregar();
-    const dpad = hud.querySelector('.hud-dpad'), btns = hud.querySelector('.hud-btns');
-    const dir = ['Up', 'Left', 'Right', 'Down'];
-    btns.innerHTML = '';
-    l.filter(x => dir.indexOf(x.k) < 0).forEach(x => {
-      const b = document.createElement('button');
-      b.textContent = x.r; b.dataset.k = x.k;
-      b.onclick = e => { e.preventDefault(); if (window.DsC) DsC.tecla(x.k); };
-      btns.appendChild(b);
-    });
-    dpad.querySelectorAll('button').forEach(b => {
-      b.onclick = e => { e.preventDefault(); if (window.DsC) DsC.tecla(b.dataset.k); };
-    });
-  }
-  montarHud();
-
-  /* ---------- conjuntos prontos: Roblox Studio, Blender, desktop ---------- */
-  const selPreset = $('#hud-preset');
-  if (selPreset && window.HUD) {
-    HUD.montarSelect(selPreset);
-    selPreset.onchange = () => {
-      const n = selPreset.value;
-      if (!n) return;
-      HUD.aplicar(n);
-      montarHud();
-      const d = HUD.presets[n].dica;
-      if (d) $('#dsr-msg').textContent = d;
-    };
-  }
-  const hudMouse = $('#hud-mouse'), hudTela = $('#hud-tela'), hudX = $('#hud-x');
-  function pintaHudMouse() { if (hudMouse) hudMouse.textContent = (window.DsC && DsC.cursor.modo === 'mouse') ? 'Mouse ✓' : 'Mouse'; }
-  if (hudMouse) hudMouse.onclick = e => {
-    e.preventDefault();
-    DsC.setCursorModo(DsC.cursor.modo === 'mouse' ? 'toque' : 'mouse');
-    pintaHudMouse();
-  };
-  if (hudTela) hudTela.onclick = async e => { e.preventDefault(); const r = await DsC.telaCheia(); if (!r.ok) alert(r.erro); };
-  if (hudX) hudX.onclick = e => { e.preventDefault(); hud.style.display = 'none'; };
-  pintaHudMouse();
-
-  let editor = null;
-  $('#dsr-hudcfg').onclick = function () {
-    if (editor) { editor.remove(); editor = null; return; }
-    editor = document.createElement('div');
-    editor.className = 'hud-edit';
-    editor.innerHTML = '<input id="he-r" placeholder="rotulo (ex: F5)">' +
-      '<input id="he-k" placeholder="tecla (ex: F5, ctrl+s)">' +
-      '<button class="mini" id="he-add">adicionar</button>' +
-      '<span id="he-l" style="display:flex;gap:5px;flex-wrap:wrap"></span>';
-    $('#dsr-tela').appendChild(editor);
-    const lista = editor.querySelector('#he-l');
-    function pintaL() {
-      lista.innerHTML = '';
-      carregar().forEach((x, i) => {
-        const c = document.createElement('span');
-        c.className = 'hud-chip';
-        c.innerHTML = '<span></span><button>&times;</button>';
-        c.querySelector('span').textContent = x.r + ' = ' + x.k;
-        c.querySelector('button').onclick = () => {
-          const l = carregar(); l.splice(i, 1); salvar(l); montarHud(); pintaL();
-        };
-        lista.appendChild(c);
-      });
-    }
-    pintaL();
-    editor.querySelector('#he-add').onclick = () => {
-      const r = editor.querySelector('#he-r').value.trim();
-      const k = editor.querySelector('#he-k').value.trim();
-      if (!r || !k) { alert('preencha rotulo e tecla'); return; }
-      if (!/^[A-Za-z0-9+_-]+$/.test(k)) { alert('tecla invalida. Use letras, numeros e +'); return; }
-      const l = carregar(); l.push({ k, r }); salvar(l); montarHud(); pintaL();
-      editor.querySelector('#he-r').value = ''; editor.querySelector('#he-k').value = '';
-    };
-  };
-
-  /* ---------- pinch e dois dedos na tela remota ---------- */
-  const img = $('#dsr-img');
-  if (img && window.DsC && !img._gestos) {
-    img._gestos = true;
-    let d0 = 0, cx = 0, cy = 0;
-    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    img.addEventListener('touchstart', e => {
-      if (e.touches.length === 2) {
-        d0 = dist(e.touches);
-        cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      }
-    }, { passive: true });
-    img.addEventListener('touchmove', e => {
-      if (e.touches.length === 2 && d0) {
-        const d1 = dist(e.touches);
-        if (Math.abs(d1 - d0) > 40) {
-          const p = DsC.coord(img, cx, cy);
-          if (p) DsC.enviar({ t: 'pinch', x: p.x, y: p.y, escala: d1 > d0 ? 1.2 : 0.8, n: 2 });
-          d0 = d1;
-        }
-        e.preventDefault();
-      }
-    }, { passive: false });
-    img.addEventListener('touchend', e => { if (e.touches.length < 2) d0 = 0; }, { passive: true });
-  }
-
-  /* ---------- gamepad fisico (item 6) ---------- */
-  if (navigator.getGamepads) {
-    const MAPA = ['Return', 'Escape', 'Tab', 'space', 'Up', 'Down', 'Left', 'Right'];
-    let ant = [];
-    setInterval(() => {
-      const gp = navigator.getGamepads()[0];
-      if (!gp || !window.DsC || !DsC.stream.rodando) return;
-      gp.buttons.forEach((b, i) => {
-        if (b.pressed && !ant[i] && MAPA[i]) DsC.enviar({ t: 'gamepad', tecla: MAPA[i] });
-        ant[i] = b.pressed;
-      });
-      const ex = gp.axes[0] || 0, ey = gp.axes[1] || 0;
-      if (Math.abs(ex) > 0.3 || Math.abs(ey) > 0.3)
-        DsC.enviar({ t: 'trackpad', dx: Math.round(ex * 14), dy: Math.round(ey * 14) });
-    }, 120);
-  }
-})();
+  function iniciar() …
