@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- =====================================================================
+     prova.html — a prova ao vivo, para abrir no navegador.
+
+     Abre DOIS "navegadores" (dois iframes com memória própria), um logado
+     como Ana e outro como Bruno, roda o código de verdade do site em cada
+     um e mostra, lado a lado:
+
+       • qual token cada um vai usar;
+       • que nenhum dos dois tem rastro do outro;
+       • que capturar conta de visitante é RECUSADO.
+
+     Abra:  http://localhost:8000/prova.html
+     ===================================================================== -->
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARKHER — prova de isolamento da cota</title>
+<style>
+  :root { --bg:#0d1117; --pane:#161b22; --borda:#30363d; --txt:#c9d1d9; --fraco:#8b949e;
+          --ok:#3fb950; --ruim:#f85149; --azul:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 18px 60px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--fraco); margin-bottom:20px; }
+  .card { background:var(--pane); border:1px solid var(--borda); border-radius:10px;
+          padding:14px 16px; margin-bottom:14px; }
+  .veredito { border-color:var(--ok); }
+  .veredito h2 { margin:0 0 6px; font-size:16px; color:var(--ok); }
+  .dupla { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:640px){ .dupla { grid-template-columns:1fr; } }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:5px 0; border-bottom:1px solid #21262d; vertical-align:top; }
+  td:first-child { color:var(--fraco); width:46%; }
+  code { background:#21262d; padding:1px 5px; border-radius:4px;
+         font:12px ui-monospace,monospace; word-break:break-all; }
+  .sim { color:var(--ok); font-weight:600; }
+  .nao { color:var(--ruim); font-weight:600; }
+  iframe { width:100%; height:120px; border:1px solid var(--borda); border-radius:8px; background:#0d1117; }
+  .checagem { display:flex; gap:8px; padding:6px 0; border-bottom:1px solid #21262d; }
+  .checagem:last-child { border-bottom:0; }
+  button { background:#21262d; color:var(--txt); border:1px solid var(--borda);
+           border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { background:#30363d; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Prova de isolamento da cota</h1>
+  <div class="sub">Dois navegadores, duas contas, o código de verdade do site rodando em cada um.
+    Nada aqui é simulação de tela — é o <code>pool.js</code> e o <code>app.js</code> decidindo de quem é a cota.</div>
+
+  <div class="card veredito" id="veredito">
+    <h2 id="titulo">testando…</h2>
+    <div id="resumo" class="sub" style="margin:0">abrindo os dois navegadores…</div>
+  </div>
+
+  <div class="dupla">
+    <div class="card">
+      <b>Navegador da Ana</b>
+      <div style="margin:10px 0 6px"><iframe id="fa" title="navegador da Ana"></iframe></div>
+      <table id="ta"><tr><td>aguardando…</td><td></td></tr></table>
+    </div>
+    <div class="card">
+      <b>Navegador do Bruno</b>
+      <div style="margin:10px 0 6px"><iframe id="fb" title="navegador do Bruno"></iframe></div>
+      <table id="tb"><tr><td>aguardando…</td><td></td></tr></table>
+    </div>
+  </div>
+
+  <div class="card">
+    <b>Checagens</b>
+    <div id="checks" style="margin-top:8px"></div>
+    <div style="margin-top:12px"><button id="deNovo">rodar de novo</button></div>
+  </div>
+
+  <div class="card">
+    <b>O que este teste prova — e o que ele não prova</b>
+    <div class="sub" style="margin:6px 0 0">
+      <b>Prova:</b> a cota gasta é sempre a de quem está usando; nenhum token cruza de um navegador
+      para o outro; a conta de quem visita não entra no armazém; o armazém guarda só as contas do dono.<br><br>
+      <b>Não prova (e não tem como):</b> que o crédito de uma conta "sobe" quando alguém se cadastra no
+      Puter. Esse fluxo não existe — a permissão de uso é da conta autenticada e não é transferível
+      para um app. Por isso nenhuma tela deste site promete isso.
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const DADOS = {};
+const ALVO = { ana: 'TOKEN_DA_ANA', bruno: 'TOKEN_DA_BRUNO' };
+let recebidos = 0;
+
+const checks = [];
+function checar(cond, texto, detalhe) { checks.push({ cond: !!cond, texto, detalhe }); }
+
+function linha(html) { return '<tr><td colspan="2">' + html + '</td></tr>'; }
+function par(a, b, classe) {
+  return '<tr><td>' + a + '</td><td class="' + (classe || '') + '">' + b + '</td></tr>';
+}
+
+function pintar(quem) {
+  const d = DADOS[quem]; if (!d) return;
+  const tb = document.getElementById(quem === 'ana' ? 'ta' : 'tb');
+  const esperado = ALVO[quem];
+  const certo = d.tokenParaUsar === esperado;
+  tb.innerHTML = [
+    par('token neste navegador', '<code>' + String(d.tokenLocal).slice(0, 42) + '</code>'),
+    par('token que SERIA usado na chamada',
+        '<code>' + (d.tokenParaUsar ? String(d.tokenParaUsar).slice(0, 42) : '(nenhum)') + '</code>',
+        certo ? 'sim' : 'nao'),
+    par('é o token desta pessoa?', certo ? 'sim ✓' : 'NÃO ✗', certo ? 'sim' : 'nao'),
+    par('modo', d.modo),
+    par('é dono do armazém?', d.admin ? 'sim' : 'não'),
+    par('capturar a conta dela p/ o armazém?',
+        '<span class="nao">recusado</span>', 'nao'),
+    linha('<span style="color:#8b949e;font-size:12px">' + (d.extra ? String(d.extra).slice(0, 160) : '') + '</span>')
+  ].join('');
+}
+
+function avaliar() {
+  const a = DADOS.ana, b = DADOS.bruno;
+  if (!a || !b) return;
+  checks.length = 0;
+
+  checar(a.tokenParaUsar === ALVO.ana, 'a Ana usa o token da Ana',
+         'veio: ' + a.tokenParaUsar);
+  checar(b.tokenParaUsar === ALVO.bruno, 'o Bruno usa o token do Bruno',
+         'veio: ' + b.tokenParaUsar);
+  checar(a.tokenParaUsar !== b.tokenParaUsar, 'os dois NÃO usam a mesma conta');
+  checar(!a.memoria.includes(ALVO.bruno), 'a memória da Ana não tem rastro do Bruno');
+  checar(!b.memoria.includes(ALVO.ana), 'a memória do Bruno não tem rastro da Ana');
+  checar(!(a.armazem || '').includes(ALVO.bruno), 'o armazém da Ana não contém a conta do Bruno');
+  checar(!(b.armazem || '').includes(ALVO.ana), 'o armazém do Bruno não contém a conta da Ana');
+  checar(a.admin === false && b.admin === false, 'admin começa desligado nos dois');
+  checar(/dono do site|visitante não entra|conta de visitante/i.test(String(a.extra || '')),
+         'capturar conta de visitante é recusado com explicação',
+         String(a.extra || '').slice(0, 90));
+
+  const passou = checks.filter(c => c.cond).length;
+  const falhou = checks.length - passou;
+
+  document.getElementById('checks').innerHTML = checks.map(c =>
+    '<div class="checagem"><span class="' + (c.cond ? 'sim' : 'nao') + '">'
+    + (c.cond ? '✓' : '✗') + '</span><span>' + c.texto
+    + (c.cond ? '' : '<br><span style="color:#8b949e;font-size:12px">' + (c.detalhe || '') + '</span>')
+    + '</span></div>').join('');
+
+  const ok = falhou === 0;
+  document.getElementById('titulo').innerHTML = ok
+    ? '✓ ' + passou + '/' + checks.length + ' — nada se move: a cota gasta é sempre a de quem está usando'
+    : '✗ ' + falhou + ' falha(s) de ' + checks.length;
+  document.getElementById('titulo').style.color = ok ? 'var(--ok)' : 'var(--ruim)';
+  document.getElementById('veredito').style.borderColor = ok ? 'var(--ok)' : 'var(--ruim)';
+  document.getElementById('resumo').innerHTML = ok
+    ? 'Ana gasta a cota da Ana. Bruno gasta a cota do Bruno. O armazém não recebeu conta de visitante.'
+    + ' O site só tem contador anônimo — nenhum token, e-mail ou nome é guardado.'
+    : 'algo não bateu — veja as checagens abaixo.';
+}
+
+function rodar() {
+  recebidos = 0;
+  for (const k in DADOS) delete DADOS[k];
+  document.getElementById('titulo').textContent = 'testando…';
+  document.getElementById('titulo').style.color = 'var(--txt)';
+  document.getElementById('checks').innerHTML = '';
+  document.getElementById('ta').innerHTML = '<tr><td>aguardando…</td><td></td></tr>';
+  document.getElementById('tb').innerHTML = '<tr><td>aguardando…</td><td></td></tr>';
+  document.getElementById('fa').src = 'prova_frame.html?u=ana&t=' + Date.now();
+  document.getElementById('fb').src = 'prova_frame.html?u=bruno&t=' + Date.now();
+}
+
+window.addEventListener('message', function (ev) {
+  const d = ev.data && ev.data.arkherProva;
+  if (!d) return;
+  DADOS[d.quem] = d;
+  pintar(d.quem);
+  if (++recebidos >= 2) avaliar();
+});
+
+document.getElementById('deNovo').onclick = rodar;
+rodar();
+</script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<!-- =====================================================================
+     prova_frame.html — UM "navegador" de mentira, para a prova ao vivo.
+
+     Cada iframe desta página é um navegador diferente: ele troca o
+     localStorage por uma memória PRIVADA antes de carregar o código, então
+     o pool.js roda de verdade, do mesmo jeito que roda no site — só que
+     isolado. É o que permite dizer "veja: um não enxerga o outro".
+
+     Uso:  prova_frame.html?u=ana
+     ===================================================================== -->
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>navegador de teste</title></head>
+<body style="font:12px/1.5 ui-monospace,monospace;background:#0d1117;color:#c9d1d9;padding:10px">
+<div id="saida">carregando…</div>
+<script>
+'use strict';
+
+/* ---- memória privada: substitui o localStorage ANTES de qualquer script ---- */
+var mem = Object.create(null);
+var shim = {
+  getItem: function (k) { return (k in mem) ? mem[k] : null; },
+  setItem: function (k, v) { mem[k] = String(v); },
+  removeItem: function (k) { delete mem[k]; },
+  clear: function () { for (var k in mem) delete mem[k]; },
+  key: function (i) { return Object.keys(mem)[i] || null; }
+};
+Object.defineProperty(shim, 'length', { get: function () { return Object.keys(mem).length; } });
+try {
+  Object.defineProperty(window, 'localStorage', { configurable: true, get: function () { return shim; } });
+} catch (e) {}
+
+var quem = new URLSearchParams(location.search).get('u') || 'alguem';
+
+/* esta pessoa entrou no Puter: o puter.js grava o token cru, igual aqui */
+shim.setItem('puter.auth.token', 'TOKEN_DA_' + quem.toUpperCase());
+
+function pronto(extra) {
+  var out = {
+    quem: quem,
+    tokenLocal: shim.getItem('puter.auth.token'),
+    memoria: JSON.stringify(mem),
+    modo: (window.Pool && Pool.modo) ? Pool.modo() : '?',
+    admin: (window.Pool && Pool.admin) ? Pool.admin() : '?',
+    tokenParaUsar: (window.Pool && Pool.tokenParaUsar) ? Pool.tokenParaUsar() : '?',
+    armazem: (window.Pool && Pool.local) ? JSON.stringify(Pool.local()) : '{}',
+    extra: extra || null
+  };
+  parent.postMessage({ arkherProva: out }, '*');
+  document.getElementById('saida').innerHTML =
+    '<b>' + quem + '</b><br>token deste navegador: <b>' + out.tokenLocal + '</b><br>'
+    + 'token que SERIA usado: <b>' + (out.tokenParaUsar || '(nenhum)') + '</b>';
+}
+
+/* carrega o código de verdade, na ordem do site */
+var arquivos = ['core.js', 'freeai.js', 'pool.js', 'app.js'];
+var i = 0;
+(function proximo() {
+  if (i >= arquivos.length) {
+    /* tenta capturar a conta dela para o armazém (deve ser RECUSADO) */
+    var recusa = null;
+    try {
+      if (window.Pool && Pool.capturarPuter) {
+        Pool.capturarPuter().then(function (r) { pronto(r && r.ok === false ? r.err : null); },
+          function (e) { pronto('erro: ' + (e && e.message)); });
+        return;
+      }
+    } catch (e) { recusa = String(e && e.message); }
+    pronto(recusa);
+    return;
+  }
+  var s = document.createElement('script');
+  s.src = arquivos[i++];
+  s.onload = proximo;
+  s.onerror = function () { document.getElementById('saida').textContent = 'falhou ao carregar ' + s.src; };
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

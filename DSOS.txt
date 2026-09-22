@@ -1,0 +1,222 @@
+DsOS — SISTEMA OPERACIONAL REMOTO
+=================================
+
+O QUE MUDOU (correcao importante)
+---------------------------------
+A primeira versao desenhava um "desktop" em HTML dentro do site. Isso estava
+errado: era exatamente o que o item 20 da especificacao proibe — "um site que
+simula um sistema operacional".
+
+Agora o DsOS e um sistema real que roda NO BACKEND. O site nao desenha nada:
+ele recebe a imagem da tela e devolve os toques. Se o backend nao tiver sessao
+grafica, a tela nao aparece e o site diz o motivo — nunca inventa um desktop.
+
+ARQUITETURA
+-----------
+   Celular/PC  ->  site (tela + toque)  ->  Tailscale/HTTP  ->  DsOS Core
+                                                                 |
+                                              +------------------+------------------+
+                                              |                                     |
+                                     Kaggle (Linux/GPU)                  GitHub (Windows)
+                                     Xvfb + openbox                      sessao grafica nativa
+
+O site e a porta de entrada. O DsOS existe separado dele.
+
+POR QUE A MESMA CONEXAO DO AGENTE
+---------------------------------
+Voce perguntou isso e estava certo. O canal ja existia e funcionava: Tailscale
+da IP fixo e criptografado, HTTP e simples e atravessa tudo. O DsOS usa o mesmo
+canal, na porta ao lado:
+
+   porta 8765 = agente  (comandos, JSON)
+   porta 8766 = DsOS    (tela, entrada, sistema)
+
+Sao dois processos independentes: se um cair, o outro continua.
+
+O NUCLEO (dsos_core.py na raiz do repo, so stdlib)
+---------------------------------------
+Linux:   Xvfb cria a tela -> openbox gerencia janelas -> ffmpeg/import captura
+         -> xdotool injeta mouse e teclado.
+Windows: usa a sessao grafica que ja existe; captura por .NET Graphics
+         (CopyFromScreen) e entrada por mouse_event/SendKeys.
+
+Rotas:
+   GET  /health   esta vivo + hardware real
+   GET  /sys      hardware detalhado
+   GET  /frame    JPEG da tela AGORA  (503 se nao houver sessao grafica)
+   GET  /janelas  janelas abertas
+   GET  /procs    processos por uso de memoria
+   GET  /apps     apps instalados de verdade
+   GET  /fs?p=    navegar arquivos
+   POST /boot     sobe a sessao grafica
+   POST /input    touch, clique, arrasto, scroll, texto, tecla
+   POST /exec     comando no shell
+   POST /abrir    abre um app
+   POST /matar    encerra processo
+   POST /res      muda resolucao
+   GET  /ws?canal=frames  tela ao vivo por WebSocket (o navegador nao pede)
+   GET  /ws?canal=input   mouse/teclado pelo mesmo socket
+
+CONTROLE PELO CELULAR
+---------------------
+Toque curto      -> clique esquerdo
+Toque longo      -> clique direito
+Arrastar         -> drag
+Dois toques      -> duplo clique
+Rolagem          -> scroll
+HUD virtual      -> setas, OK, ESC, TAB, MENU, backspace (liga e desliga)
+Botao Teclado    -> digita texto na maquina remota
+
+A conversao de coordenada respeita o tamanho real da tela remota, entao o
+clique cai no lugar certo mesmo com a imagem redimensionada no celular.
+
+HARDWARE: SEMPRE REAL
+---------------------
+CPU vem de /proc/cpuinfo ou Win32_Processor. RAM de /proc/meminfo ou CIM.
+GPU e VRAM SO do nvidia-smi — se ele nao existir, o campo volta null e a
+interface escreve "sem GPU". Nenhum valor fixo no codigo. Teste feito nesta
+maquina sem GPU: retornou gpu:null, e a barra mostrou "sem GPU". Correto.
+
+HONESTIDADE DE CAPACIDADE
+-------------------------
+Teste real: rodei o DsOS numa maquina sem Xvfb.
+   /frame respondeu HTTP 503 "sem ferramenta de captura"
+   /input respondeu "xdotool ausente"
+   /boot  respondeu "Xvfb nao instalado" + lista do que falta
+   /apps  respondeu lista vazia com explicacao
+Em nenhum momento apareceu uma tela falsa. E esse o comportamento exigido.
+
+WINDOWS DE VERDADE
+------------------
+Voce condicionou: o DsOS so vira a VM se rodar coisa de Windows.
+O backend Windows do GitHub Actions ja tem sessao grafica ativa (o workflow faz
+isso no step "Ativar sessao grafica"), Roblox Studio e Blender instalados. O
+DsOS Core no Windows captura essa tela e injeta entrada nela. Entao sim:
+Roblox Studio aparece no seu celular e responde ao seu toque.
+
+O Kaggle continua Linux. Nao ha conversao de Kaggle em Windows — isso voce
+proibiu e continua valendo. Quem precisa de Windows vai pro backend Windows.
+
+DIVISAO DE TRABALHO
+-------------------
+Roblox Studio ........ Windows (unica opcao real)
+Blender interativo ... Windows, ou Linux com Xvfb
+Blender render ....... Kaggle (GPU P100/T4)
+IA 3D ................ Kaggle (GPU)
+Terminal/scripts ..... qualquer um
+Chat IA .............. navegador
+
+Um projeto pode usar varios ao mesmo tempo: Studio no Windows, render no
+Kaggle, git no GitHub.
+
+LIMITES REAIS, DITOS NA CARA
+----------------------------
+- Transporte agora e JPEG por WebSocket (o DsOS EMPURRA os quadros; nao ha
+  mais uma requisicao por foto, nem um POST por toque). Da 8-25 fps conforme a
+  rede. Serve pra trabalhar, editar, clicar. Nao serve pra jogar em 60 fps.
+  Video H.264 exigiria WebRTC/VNC com servidor de sinalizacao sempre no ar —
+  o rtc.io esta parado desde 2019. Se o backend nao tiver o ws_min.py, o site
+  cai sozinho pro modo antigo (foto a foto).
+- Sessao do Kaggle morre em 9-12 h; a do Actions em ~6 h. O estado e salvo
+  antes de cair, mas nao e um PC ligado pra sempre.
+- Compatibilidade Android ainda nao existe no backend. Nao inventei um campo
+  dizendo que sim.
+- O primeiro boot no Kaggle demora 1-3 min instalando o ambiente grafico.
+
+COMO SUBIR
+----------
+Kaggle:  Accelerator GPU, Internet On, secret TS_KEY, Run All.
+         No fim imprime  http://100.x.y.z:8766
+Windows: rode o workflow. O step "COMO ACESSAR" imprime o endereco (:8766).
+         Sem sessao grafica (ninguem logado) o /frame devolve 503 e o site
+         avisa. Conecte por RDP uma vez; se ficar preto: tscon 1 /dest:console
+Local:   python dsos_core.py   (env: DSOS_PORT, DSOS_ROOT, DSOS_BACKEND,
+         DSOS_DISPLAY=:77, DSOS_W/DSOS_H, DSOS_AUTOBOOT=1)
+Site:    aba DsOS -> cole o endereco -> Conectar -> Ligar DsOS.
+
+Se o site for https e o DsOS http, o Chrome bloqueia sem avisar. Cadeado ->
+Configuracoes do site -> Conteudo nao seguro -> Permitir.
+
+NOVO BACKEND NO FUTURO
+----------------------
+O DsOS Core e um arquivo Python de stdlib. Roda em qualquer lugar com Python:
+VPS, Colab, PC proprio, GPU cloud. Nao ha nada especifico do Kaggle no nucleo —
+ele so le variaveis de ambiente. Somar um backend = rodar o mesmo arquivo la e
+colar o endereco. O nucleo nao muda.
+
+
+GERENCIADOR DE COMPUTACAO (item 17)
+-----------------------------------
+Botao "Computacao" na barra do DsOS. Ele sonda /capacidades de cada backend e
+mostra, com dado medido na hora:
+
+   Backend           CPU/RAM/GPU real      Linux Windows Android Tela Entrada CUDA
+   Este dispositivo  navegador             -     -       -       -    -       -
+   Kaggle            Xeon x4 32GB P100     sim   nao     nao     sim  sim     sim
+   PC Windows        Xeon x4 16GB          nao   sim     nao     sim  sim     nao
+
+Embaixo, a tabela "para onde vai cada tarefa" — calculada, nao escrita a mao.
+
+Somar backend novo: campo nome + endereco, botao "Somar backend". Nao mexe em
+codigo. Testado: VPS com RTX 3090 entrou e passou a receber a tarefa de IA 3D
+automaticamente (186 pontos contra 96 do Kaggle).
+
+ROTEAMENTO — TESTES EXECUTADOS
+------------------------------
+Roblox Studio      -> PC Windows          (unico com Windows nativo)
+Blender interativo -> Kaggle              (tem tela + GPU)
+Blender render     -> Kaggle              (GPU)
+Gerar 3D com IA    -> Kaggle              (CUDA)
+Terminal           -> Kaggle
+Chat com IA        -> Este dispositivo
+App Android        -> RECUSADO: nenhum backend tem runtime Android
+
+Forcar backend errado:
+   Roblox no Kaggle -> "sem compatibilidade Windows", sugere PC Windows
+   IA 3D no Windows -> "sem GPU CUDA", sugere Kaggle
+
+Windows offline + VPS com Wine disponivel:
+   Roblox -> RECUSADO. "Wine nao serve para este app."
+   Nao caiu no Wine so pra parecer que funciona. Esse era o teste importante.
+
+PROJETO DISTRIBUIDO (item 16) — testado
+---------------------------------------
+   Editar no Studio -> PC Windows
+   Gerar 3D         -> Kaggle
+   Rodar scripts    -> Kaggle
+   Render assets    -> Kaggle
+Quatro partes do mesmo projeto, tres backends, decidido automaticamente.
+
+CONTROLE COMPLETO (itens 5, 6 e 7)
+----------------------------------
+Toque curto = clique | toque longo = botao direito | arrastar = drag
+Dois toques = duplo clique | rolagem = scroll | dois dedos = pinch (zoom)
+Multi-touch: enviado como cliques em sequencia. X11 nao expoe multitouch real
+   e o sistema diz isso na resposta, em vez de fingir.
+Gamepad fisico: detectado por navigator.getGamepads, botoes mapeados para teclas.
+Trackpad: movimento relativo do cursor.
+HUD configuravel: botao "+" ao lado de HUD. Voce cria botao com rotulo e tecla
+   (ex: F5, ctrl+s), remove, e fica salvo. Testado: 9 botoes -> somei F5 -> 10,
+   persistido em dsos_hud.
+
+COMPATIBILIDADE: O QUE E REAL HOJE
+----------------------------------
+Linux   ....... nativo no Kaggle. Funciona.
+Windows ....... nativo no backend GitHub Actions. Funciona.
+                Wine em Linux: detectado se instalado, mas marcado como
+                inadequado para Roblox Studio (anticheat).
+Android ....... NAO funciona em nenhum backend atual. Waydroid e Anbox exigem
+                kernel com binder e privilegio de root, que nem Kaggle nem
+                Actions concedem. O sistema reporta android:false com esse
+                motivo. Nao criei um campo falso dizendo que sim.
+Audio ......... sem servidor de audio nos backends testados, e sem transporte
+                de audio pro navegador. Reportado como false.
+
+O QUE FOI CORRIGIDO NESTA RODADA
+--------------------------------
+1. /servicos dizia "Xvfb ativo" quando nao estava — o pgrep casava com o texto
+   dentro do proprio arquivo do DsOS. Agora pergunta ao servidor X (xdpyinfo),
+   que e o teste que nao mente.
+2. captura e entrada respondiam "true" so por existir o binario. Agora exigem
+   sessao grafica no ar. Antes: tela=false mas captura=true (incoerente).
+3. compute.js testava window.LS e usava LS — funcionava no navegador por acaso.

@@ -1,0 +1,312 @@
+================================================================
+  ARKHER — 3D, VELOCIDADE E O APP
+  (o que eu fiz, o que da pra fazer e o que nao da — sem enrolacao)
+================================================================
+
+1) 3D DE VERDADE (aba 3D)
+----------------------------------------------------------------
+Antes a aba 3D apontava pra um script que nao existia. Agora existe o
+motor, e ele roda no no que voce ja tem (Kaggle com GPU, PC Windows, ou
+ate no Termux).
+
+MOTORES (o site mostra isso em "aba 3D > Ver motores"):
+
+  shape        texto -> 3D     Shap-E        ~2 GB   6 GB VRAM   pip puro
+  shape-img    imagem -> 3D    Shap-E        ~2 GB   6 GB VRAM   pip puro
+  triposr      imagem -> 3D    TripoSR       ~1,7 GB 8 GB VRAM   precisa compilar
+  sd-turbo     texto -> imagem SD-Turbo      ~2,5 GB 4 GB VRAM   (alimenta o TripoSR)
+  procedural   (sem IA)        primitivas    50 MB   0           so pra testar
+
+O QUE ESCOLHER:
+  - Tem GPU (Kaggle P100/T4 ou PC com CUDA): TripoSR. Malha bem mais
+    limpa. Texto vira imagem com o SD-Turbo e depois o TripoSR
+    reconstrói. ~1 min por objeto no T4.
+  - So CPU: Shap-E. Roda, mas 5 a 20 min por objeto e a forma sai
+    "bolhuda" — serve de rascunho, nao de modelo final.
+  - Testar o encanamento sem GPU nem download: procedural.
+
+HONESTIDADE (isso importa):
+  - Eu NAO consegui rodar o Shap-E nem o TripoSR neste sandbox: nao ha
+    GPU nem VRAM aqui, e os pesos ficam no huggingface.co (bloqueado
+    aqui). O que eu testei de ponta a ponta foi: o catalogo de motores,
+    o job, o download do .glb, o preview, o instalador (a parte de pip),
+    o render e a normalizacao da malha. As funcoes que chamam o diffusers
+    foram escritas contra a API real (conferi assinatura e caminho de
+    codigo no pacote instalado) — mas o primeiro Shap-E de verdade vai
+    ser no seu Kaggle. Se falhar, o log do job diz exatamente o que
+    faltou; nao travei nada com mensagem generica.
+  - O TripoSR precisa do torchmcubes COMPILADO (2-5 min) e do rembg
+    (baixa um modelo proprio). Se o rembg falhar, o gerar3d tenta de
+    novo sem ele (fundo liso na imagem).
+  - No Kaggle, use a celula 5 pra instalar e a 6 pra gerar — ela mostra
+    o render aqui mesmo. Depois e so escolher "Kaggle (GPU)" na aba 3D.
+
+COMO USAR:
+  site: aba 3D -> escolha o no -> Gerar. Sai o preview na tela e o .glb
+        pra baixar (entra no Blender, Roblox, Unity, o que quiser).
+  chat: peça "faz um modelo 3D de um cogumelo" — a IA escolhe a ferramenta
+        gerar_3d sozinha.
+  linha de comando (no proprio no):
+        python gerar3d.py --lista
+        python gerar3d.py --prompt "uma espada de gelo"
+        python gerar3d.py --imagem foto.png --engine triposr
+        python gerar3d.py --instalar triposr
+        python gerar3d.py --selftest      (nao precisa de GPU nem internet)
+
+2) "DA PRA USAR O rtc-io E FICAR MAIS RAPIDO?"
+----------------------------------------------------------------
+Voce achou a coisa certa (WebRTC serviria pra tela remota), mas a
+biblioteca especifica nao: o rtc.io esta parado — o ultimo commit do
+repositorio e de marco/2023 e o site/docs desde 2020. Alem disso WebRTC
+precisa de um servidor de sinalizacao SEMPRE ligado (ninguem se conecta
+sem alguem apresentar as duas pontas).
+
+Foi o que eu fiz, entao: usei a IDEIA (tirar o polling do caminho) com
+WebSocket, que o navegador ja tem e nao precisa de servidor extra.
+
+  Antes (polling)                        Agora (WebSocket)
+  ------------------------------------   ------------------------------------
+  tela: 1 requisicao HTTP por foto       o no EMPURRA o quadro (12 fps)
+  terminal: 900ms de espera por linha    a linha sai quando sai
+  terminal: 1 requisicao por comando     mesmo socket: 5 comandos = 33ms
+  toque no DsOS: 1 POST por evento       tudo pelo mesmo socket (lote 25ms)
+
+Onde isso esta:
+  ws_min.py        WebSocket so stdlib (usado pelo agente E pelo DsOS)
+  /ws no agente    canal=frames (tela), canal=job (saida ao vivo), canal=cmd
+  /ws no DsOS      canal=frames (tela), canal=input (mouse/teclado)
+  realtime.js      cliente, com queda automatica pro modo antigo
+
+E a queda automatica e o ponto: se o ws_min.py nao estiver na pasta, ou o
+navegador for antigo, ou o no for uma versao anterior, TUDO continua
+funcionando pelo caminho de antes (HTTP). Nada quebra.
+
+O QUE AINDA DARIA UM PASSO A MAIS (WebRTC/H.264 de verdade):
+  - Quem poderia hospedar a sinalizacao: o no do Android/Termux, que
+    fica ligado 24/7 (e o unico que nao tem prazo de 6h/12h).
+  - O que muda: em vez de JPEG, video H.264 opcional, com menor uso de
+    CPU e latencia. Vale a pena? Pro uso de clicar e editar, o JPEG por
+    WS ja da conta (uns 8-25 fps na Tailscale). Vai virar brinquedo caro
+    se ninguem mantiver esse servidor no ar.
+
+  2B) SE QUISER TESTAR UM WEBRTC DE VERDADE HOJE
+  A peca pronta que existe e o x11vnc (ja e instalado no Kaggle e no
+  workflow) + um cliente VNC no navegador (noVNC). E mais simples que
+  sinalizacao propria: o x11vnc expoe a tela e o noVNC abre no site.
+  Eu NAO liguei isso sozinho porque exige um cliente VNC de terceiro no
+  site (mais um arquivo grande pra manter) e o ganho sobre o WS atual e
+  pequeno pro tipo de uso. Se quiser, eu ligo.
+
+3) "DA PRA TRANSFORMAR EM UM APP OU E MELHOR SITE?"
+----------------------------------------------------------------
+Os dois, e sem virar dois codigos: o site agora INSTALA como app (PWA).
+
+  - Abra o site no Chrome/Edge: aparece o botao de instalar no topo
+    (ou menu > Instalar app). No Android, menu > "Adicionar a tela
+    inicial". No iPhone: Compartilhar > Adicionar a Tela de Inicio.
+  - Depois de instalar: icone proprio, abre em tela cheia sem barra do
+    navegador, entra na lista de apps, e as 4 abas viram atalhos
+    (segurar o icone abre "Chat", "Terminal", "Tela remota", "3D").
+  - O casco do site fica guardado (service worker): abre na hora e
+    abre offline. Nada que venha do agente/DsOS/APIs entra no cache —
+    senao voce veria a tela de 5 minutos atras achando que e a atual.
+
+POR QUE NAO UM APP NATIVO (Android/Windows instalado):
+  - O trabalho pesado roda no no (Windows da Actions ou Kaggle), nao no
+    seu aparelho. O app so desenha a tela — e isso o navegador ja faz
+    bem em qualquer aparelho, inclusive celular.
+  - Um nativo exigiria reescrever: cascata de modelos, Puter, Supabase,
+    DsOS, piloto. Dois codigos pra manter e uma loja no meio (Play Store
+    pede revisao, conta, politica de privacidade — e o app ficaria
+    "quebrado" esperando a loja aprovar cada correcao).
+  - O que nativo daria de verdade (rodar codigo local, segundo plano,
+    sem CORS) aqui nao serve: comando local ja roda via agente, e
+    segundo plano nao faz sentido pra quem nao tem trabalho local.
+  - O que voce PERDE com PWA: ver o arquivo todo bonito no Windows, e
+    no iPhone o Safari e mais chato (limpa cache do site mais rapido,
+    notificacao push so em versao recente). Se isso incomodar, a saida
+    ainda e Tauri/Electron, mas ai e so embrulhar o MESMO site — nao
+    reescrever nada. Se quiser, eu faco esse embrulho.
+
+4) AINDA HONESTO SOBRE OS LIMITES
+----------------------------------------------------------------
+  - Virtualizacao Android: nao existe. O no Android e o Termux (Linux),
+    e a abscissa "android" das capacidades continua false. Nao inventei
+    um campo dizendo que sim.
+  - Roblox Studio: abre, mas login e manual (uma vez, por RDP).
+  - Tela preta no Piloto: o runner so tem sessao grafica se alguem logou
+    por RDP pelo menos uma vez (o workflow arma autologon). Se ficar
+    preto: tscon 1 /dest:console
+  - As 6h do GitHub sao regra da plataforma: o workflow sai aos 5h50,
+    salva o estado no cache e religa com o PAT_TOKEN. O cron de 5h e a
+    rede de seguranca. Depositar 24/7 em Actions nao e o uso previsto —
+    a decisao e sua.
+  - Sem internet: chat com HF/Puter para, tela remota para. O casco do
+    site continua abrindo (isso o service worker garante).
+
+5) O QUE ENTROU DEPOIS (modelos de ponta, memoria e treino)
+----------------------------------------------------------------
+  - hf_hub.py: roda modelos de ponta do HF na GPU do no (texto/codigo,
+    textura e concept art, profundidade, tirar fundo, upscale, audio->texto).
+    Sem lib instalada ele diz o pip exato que falta, em vez de mentir "ok".
+    Rotas novas do agente: POST /infer, POST /treinar, GET /node.
+  - neural.js + conhecimento.js: armazenamento neural. O pacote de game dev
+    (Roblox/Luau/Rojo/Open Cloud/Unity/Unreal/Godot/Blender/Figma/Cascadeur/
+    mundo procedural/formatos) ja vem indexado; a busca e por significado e
+    funciona offline. Documentacao nova entra por URL (aba Cerebro > Ensinar).
+  - Treino de verdade: as licoes das conversas viram dataset (JSONL), o botao
+    "Treinar no no" roda LoRA na GPU e o modelo aparece como gpu:local:<nome>.
+    Sem GPU: "Destilar" comprime as licoes em regras que entram no prompt.
+  - religa_kaggle.py: o Kaggle nao religa sozinho (o do Actions religa).
+    Este script empurra o notebook pela API do Kaggle e vigia — morreu,
+    empurra de novo, com limite de 6 religadas por hora pra nao queimar a
+    cota de 30 h/semana.
+  - RDP: alem do que ja existia, a aba VM tem cartao RDP que descobre o
+    endereco/usuario pelo GET /node e baixa o arquivo .rdp pronto.
+  - Aba Cerebro nova no site (memoria, ensinar, buscar, aprender sozinho,
+    treinar com GPU) e o cartao RDP injetado na aba VM.
+
+6) RDP: O SITE LIGA A MAQUINA SOZINHO
+----------------------------------------------------------------
+  Voce ja tinha o jeito que funciona (repo NewRdpKAKAKAKAKA: workflow
+  que sobe Windows com RDP + Tailscale e imprime endereco/usuario/senha).
+  Agora o site faz os tres passos: dispara o workflow, espera o runner
+  e le as credenciais do log, preenchendo o cartao de RDP.
+
+  Aba VM > cartao RDP:
+    - dono/repo + workflow + PAT (Actions: write)  -> "Salvar"
+    - "Ligar a VM agora"            -> dispara, espera e preenche
+    - "Ler credenciais do ultimo run" -> pega do run que ja esta rodando
+    - campo de colar o log          -> plano B se o navegador barrar (CORS)
+    - "Baixar .rdp"                 -> arquivo pronto pro app do Windows
+
+  Dois caminhos, escolha por objetivo:
+    ARKHER (arkher.yml)      = RDP + agente + DsOS na mesma maquina (padrao)
+    So RDP (main.yml seu)    = so a tela, sem agente
+
+  E uma correcao importante: a senha do RDP nao pode ser mascarada com
+  ::add-mask:: — o GitHub trocaria por *** em TODO o log (inclusive no
+  "COMO ACESSAR") e voce nunca leria. O workflow do ARKHER nao mascara
+  de proposito, e o agente recebe ARKHER_RDP_USER/ARKHER_RDP_PW pra o
+  cartao se preencher sozinho pelo GET /node.
+
+7) ENXAME: VARIAS IAS, TODAS COM AS MESMAS MAOS
+----------------------------------------------------------------
+  Voce pediu: todos os modelos com as capacidades dos outros (um GPT
+  podendo usar 3D), cada IA no papel em que se sai melhor, de 10 a 100
+  IAs, e o resultado melhor que qualquer uma sozinha. Ficou assim
+  (enxame.js + botao na aba Cerebro):
+
+  - PAPEIS: arquiteto, programador, artista, pesquisador, critico,
+    agregador, verificador. O pedido e classificado (Luau/Roblox,
+    Unity, Unreal, Godot, Blender, arte, mundo, 3D, codigo, geral) e o
+    time e montado com modelos de familias diferentes.
+  - MESMAS FERRAMENTAS PRA TODOS: o agente do enxame roda o MESMO loop
+    do chat — gerar 3D, rodar comando na VM, ler/escrever arquivo,
+    buscar web, consultar memoria. Nao existe agente "de segunda": o
+    papel muda o que ele tenta primeiro, nao o que ele PODE.
+  - CRITICA + AGREGACAO: um critico da nota e aponta a melhor; o
+    agregador junta o melhor de todas (fusao, nao votacao). Da pra
+    ligar tambem a verificacao com ferramentas antes de entregar.
+  - APRENDIZADO: fica gravado quem manda bem em cada tipo de pedido
+    (Enxame.tabela()) e o par escolhido/rejeitado vira dado de DPO. Ou
+    seja: o enxame melhora a si mesmo com o proprio julgamento.
+  - ESCALA COM O ARMAZEM DE COTA (pool.js): o enxame le quantas contas
+    suas existem e quantas estao livres, e cresce ate elas (padrao: ate
+    12 IAs, paralelo igual as cotas livres). Estourou 429? ele gira pra
+    proxima conta e o agente TENTA DE NOVO (3 vezes) em vez de morrer —
+    agente perdido = conselho mais fraco. Sem armazem: 4 IAs.
+  - ESCALADA: critica reprovou (media < 6.5 ou ninguem apontado como
+    melhor)? Entra mais gente, nova critica, nova agregacao.
+  - MODO PROFUNDO: tarefa grande (jogo/sistema/projeto, ou texto longo)
+    -> um planejador quebra em ate 4 subtarefas, CADA UMA roda o proprio
+    conselho, e o agregador final junta tudo num projeto. Da pra forcar
+    (sim), desligar (nao) ou deixar no automatico.
+
+8) TREINO NO KAGGLE: O NO FICA MAIS FORTE SOZINHO
+----------------------------------------------------------------
+  - Sim, a GPU de treino pode ser o Kaggle (P100/T4 — o T4 do Kaggle nao
+    tem flash-attn; o codigo usa fp16/xformers quando precisa).
+  - O site manda o cerebro pro no: POST /dataset (licoes + pares de
+    preferencia, sem repetir). GET /dataset mostra total e o que ja foi
+    treinado. POST /treinar sem amostras usa o dataset acumulado.
+  - POST /dataset/auto liga o TREINO AUTOMATICO: juntou 40 amostras
+    novas, ele treina (LoRA se for maioria conversa, DPO se for maioria
+    preferencia) e o modelo vira gpu:local:<nome> no chat.
+  - A celula 2d do notebook liga isso e roda um vigia: pinga o no a cada
+    3 min (o Kaggle mata a sessao parada por 20 min) e religa o agente
+    se ele cair. A sessao dura ~12 h; ~30 h de GPU por semana.
+  - Quem NAO tem GPU: a VM Windows do GitHub Actions (inclusive a do
+    repo so-RDP). Ela serve pra tela/Windows/ferramentas; treino e 3D
+    pesado vao pro Kaggle ou pro seu PC. Nao da pra fingir GPU.
+
+9) MEMORIA COMPARTILHADA: IAS, CHATS, ABAS E VMs NO MESMO QUADRO
+----------------------------------------------------------------
+  O problema que isso resolve: cada chat comecava do zero, cada IA do
+  conselho so sabia o que estava no prompt dela, e quando a sessao de
+  VM morria (6 h do Actions / 12 h do Kaggle) ia tudo junto.
+
+  memoria.js cria um quadro unico:
+    - o CHAT le o quadro antes de responder e grava pergunta/resposta
+      boa na sessao dele;
+    - as FERRAMENTAS anotam sozinhas o que fizeram (comando, arquivo,
+      erro) — sem despejar saida crua e sem deixar senha entrar;
+    - o ENXAME cria o quadro do conselho: cada agente le o que os
+      outros descobriram, publica o que achou e, na REVISAO CRUZADA,
+      reescreve a propria proposta depois de ler as dos colegas;
+    - a SESSAO DE VM grava no proprio no (POST /memoria ->
+      $STATE/memoria.jsonl) e aquilo sobrevive a VM morrer (testado
+      reiniciando o no no meio do teste);
+    - entre APARELHOS sincroniza pelo Supabase (chave "memoria").
+
+  BUSCA POR SIGNIFICADO (nao so palavra exata): cada item tem um vetor
+  calculado NO PROPRIO NAVEGADOR (256 dimensoes, sem rede, sem token,
+  sem no). Antes de responder, o quadro escolhe o que entra no prompt
+  por relevancia (cosseno + palavras em comum + peso do tipo + uso +
+  idade): "triposr" acha "TripoSR quebrou no Kaggle", sinônimo proximo
+  e erro de digitacao entram. Conversa solta de OUTRO chat nao entra no
+  prompt. No painel: "Buscar (por significado)".
+
+  DESTILAR EM REGRAS: o quadro vira aprendizado permanente SEM GPU. O
+  botao "Destilar em regras" (ou automatico, a cada 10 min, quando
+  juntam destilarMin itens novos) le o que sobrou no quadro, pede regras
+  curtas ao modelo e guarda em Neural.regras — e essas regras entram
+  SEMPRE no prompt (teto 60). Regra generica ("seja claro e objetivo")
+  e descartada. Resultado: o que a IA aprendeu fica aprendido entre
+  sessoes, sem treino.
+
+  Sigilo a parte: item marcado sigilo NUNCA vai pro no, nunca vai pro
+  Supabase e nunca entra no prompt (senha, token, chave). A auto-captura
+  descarta o que parece segredo antes de guardar. Item de sigilo tambem
+  nao entra na destilacao.
+
+10) RESPONDER TUDO QUE E LEGAL (e nada de sermao)
+----------------------------------------------------------------
+  - O prompt carrega a POLITICA DE RESPOSTA: responde qualquer pedido
+    legal (sangue/violencia em jogo, exploit no SEU jogo, tema sensivel,
+    engenharia reversa do que e seu, seguranca em laboratorio) e recusa
+    SO o dano real: crime, arma/explosivo/droga de verdade, abuso
+    infantil, malware contra terceiros, fraude, perseguicao.
+  - Proibido no prompt: sermao, aviso moralizante, "como IA eu nao
+    posso", recusa por precaucao.
+  - E tem ANTI-RECUSA no codigo: se a resposta inteira for recusa de
+    pedido legal, ele (1) reforca o pedido com a politica, (2) se
+    insistir, troca de modelo, (3) grava quem recusa o que e joga esse
+    modelo pro fim da fila por 10 minutos.
+  - Limite honesto: filtro do PROVEDOR (Puter/HF) nao se fura — o que
+    da pra fazer e trocar de modelo/provedor, e e o que ele faz.
+
+11) O QUE MAIS DEIXA A IA FORTE (a resposta curta)
+----------------------------------------------------------------
+  1. Enxame (7) + revisao cruzada: varias IAs com as mesmas ferramentas,
+     cada uma lendo o que as outras descobriram.
+  2. Cerebro (memoria neural): quanto mais coisa indexada, menos
+     alucinacao — e funciona offline (vetor local).
+  3. DPO: aprender com o proprio julgamento, nao so copiando resposta.
+  4. Treino no no (8): vira peso, nao so prompt.
+  5. Conhecimento de engine (conhecimento.js): vocabulario e API certos
+     de Roblox/Unity/Unreal/Godot/Blender.
+  6. Ferramentas de verdade (3D, VM, arquivo, web, VNC/DsOS): a IA que
+     FAZ, nao so a que fala.
+  7. Memoria compartilhada (9): o que foi descoberto hoje vale amanha, em
+     qualquer chat, aba ou sessao de VM.

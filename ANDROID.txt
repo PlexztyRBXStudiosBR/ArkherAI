@@ -1,0 +1,46 @@
+================================================================
+NO ANDROID — o celular como terceiro no da rede ARKHER
+================================================================
+O MESMO agent.py roda no Termux. Ele detecta o Termux sozinho (usa o
+bash do proprio Termux, nao /bin/bash) e informa os=android no /health.
+Vantagem: o celular NAO desliga a cada 6h. Vira o no permanente.
+
+NO TERMUX:
+
+  pkg update -y && pkg install -y python tailscale git
+  termux-setup-storage
+
+  # baixa o agente do seu repo
+  curl -O https://raw.githubusercontent.com/WhiteXz7/ARKHER-AI/main/agent.py
+
+  # tailscale (numa aba)
+  tailscaled &
+  tailscale up --hostname=arkher-android
+
+  # pega o IP
+  tailscale ip -4
+
+  # sobe o agente (noutra aba: segure e "New session")
+  python agent.py
+
+Cole o endereco http://100.x.y.z:8765 na aba VM do site (card Android).
+Os arquivos ficam em ~/arkher_state/work (mude com ARKHER_STATE=...).
+
+PRA NAO MORRER EM SEGUNDO PLANO:
+  termux-wake-lock
+  (e desative a otimizacao de bateria do Termux nas config do Android)
+
+O QUE O NO ANDROID FAZ BEM:
+  - fica ligado 24/7 de verdade, sem prazo
+  - guarda o estado entre as sessoes do Windows
+  - roda o rclone (Drive/MediaFire) sem gastar minuto do Actions
+  - dispara o workflow quando o Windows cai:
+      curl -X POST -H "Authorization: Bearer SEU_PAT" \
+        -H "Accept: application/vnd.github+json" \
+        https://api.github.com/repos/WhiteXz7/ARKHER-AI/actions/workflows/arkher.yml/dispatches \
+        -d '{"ref":"main"}'
+    (coloque isso num loop com sleep pra religar sozinho)
+
+O QUE ELE NAO FAZ:
+  - nao tem tela Windows: nada de Roblox Studio
+  - nao tem GPU util: 3D pesado vai pro Kaggle

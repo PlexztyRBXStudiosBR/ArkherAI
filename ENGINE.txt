@@ -1,0 +1,149 @@
+ENGINE — A ENGINE DO ARKHER (APK + ROBLOX)
+==========================================
+Escrito depois da conversa de 21/09/2026. Este arquivo guarda o DESENHO,
+para nao se perder. Nada aqui esta entregue ainda: a engine e o ESTAGIO 6
+(ver a rota no fim). Antes dela vem o estudio funcionando e o loop verificado.
+
+RITMO (combinado com o dono)
+----------------------------
+Tres itens por mensagem. A ordem combinada e:
+  1) VM/DSOS liso, cursor e encaixe na tela      <- ENTREGUE
+  2) HUD virtual pronto para Roblox Studio/Blender <- ENTREGUE
+  3) Ligar vm/agente/piloto/DsOS num lugar so     <- ENTREGUE
+  4) Frontend: tela cheia, orientacao, barra de celular <- ENTREGUE
+  5) Cerebro de game dev (skills, adaptadores, loop verificado)
+  6) Engine (ver a ROTA no fim deste arquivo)
+
+ENTREGUE (com teste verde):
+  roblox/ARKHER.lua            pacote do Studio (inventario, missoes, NPC,
+                               seguranca/anti-trapaca, animacao, dialogo,
+                               salvamento, porta unica cliente->servidor)
+  roblox/ARKHER_Telemetria.lua o jogo conta onde morre/trava/sai, sem
+                               identidade e sem estourar o limite do Roblox
+  roblox/teste_arkher.lua      a bateria do pacote (121 verificacoes) —
+                               roda no Studio E fora dele, em Lua de verdade
+  telemetria.py                o no que recebe e transforma em numero +
+                               "o que mudar na proxima versao" (stdlib)
+  arkher_publicar.js           publica no GitHub e no Roblox (Open Cloud) e
+                               compara versoes pelos numeros do jogo
+Nada comeca sem estar dito aqui, e cada item so conta como entregue com
+teste verde.
+
+REGRA QUE NAO MUDA
+------------------
+Nada de numero inventado, nada de "isso roda" sem rodar. Quando uma coisa
+nao couber no aparelho ou na infra, a resposta e dita na cara e o trabalho
+e ROTEADO para quem aguenta (compute.js ja faz isso).
+
+
+PARTE 1 — ROBLOX: A FERRAMENTA DE CRIAR E PUBLICAR (original nossa)
+-------------------------------------------------------------------
+O que o usuario pediu: "poder criar jogos do roblox igual roblox studio e
+publicar, porem ao inves de copiar o roblox studio, poderiamos mudar e fazer
+tudo original nosso inclusive no ROBLOX um render HIBRIDO".
+
+O QUE E VERDADE AQUI
+  - Nao existe "engine dentro do Roblox": o Roblox JA E a engine
+    (render, fisica, rede, servidores, Loja). Copiar o Studio seria copiar
+    a casca de quem ja tem o motor.
+  - O que NAO existe em lugar nenhum e uma ferramenta que:
+      (a) usa IA de verdade para montar o jogo,
+      (b) fala com o jogo publicado (telemetria) e melhora o jogo com o
+          que aconteceu de verdade com os jogadores,
+      (c) faz isso nos TRES motores ao mesmo tempo (Roblox, Godot, Unity).
+  - Isso e permitido: o jogo fala HTTP pelo HttpService, que o Roblox
+    oferece de proposito. Nao ha scraping, nao ha burla de cota.
+
+O QUE A GENTE CONSTROI (o "Studio original nosso")
+  1. Editor de projeto ARKHER — o usuario descreve o jogo ("nave 2D que
+     desvia de asteroides, tela de game over, som"); a IA gera a ESTRUTURA
+     (scripts Luau, mapa, NPCs, UI) e o projeto fica versionado.
+  2. Pacote ARKHER (Luau) — o que o Studio nao entrega pronto:
+     controlador de personagem, inventario/crafting/salvamento, IA de NPC
+     com tabela de comportamento, missoes/dialogo/loja, cadeia de animacao,
+     camada anti-exploit no servidor.
+  3. Publicador — sobe, versiona e mede. Publicar deixa de ser clique em
+     Studio: vira passo do projeto, com historico.
+  4. Telemetria (o jogo VIVO) — o jogo publica eventos pelo HttpService
+     (onde o jogador morre, onde trava, qual fase esta dificil); o site
+     guarda isso e devolve a proxima versao. O jogo aprende com o JOGADOR,
+     nao com chute.
+
+RENDER HIBRIDO — o que da e o que nao da (importante)
+
+  NOTA DO DONO (21/09/2026): o "render hibrido" que ele quer e MELHORAR OS
+  GRAFICOS — e a especificacao vem num ARQUIVO que ele vai mandar quando
+  chegarmos nessa parte. Ou seja: o desenho abaixo e o que ja se sabe; a
+  especificacao dele manda, e este arquivo se ajusta quando ela chegar.
+  NAO inventar a especificacao antes do arquivo.
+
+  Nao da: transferir o render do Roblox para a nossa maquina. Quem desenha
+  o jogo e o aparelho do JOGADOR. Isso e do Roblox, nao nosso.
+
+  Da — e da muito ganho — mover para ANTES o que nao precisa ser ao vivo:
+    - COZINHAR FORA (nossa GPU, Kaggle): luz e sombra assadas em textura,
+      LOD por distancia, malhas e texturas geradas pela IA, ceu, materiais.
+      Sombra assada no lugar de sombra em tempo real e o maior ganho que
+      existe em celular fraco: a GPU do jogador so pinta.
+    - CLIENTE ADAPTATIVO: detectar o aparelho e escolher a qualidade
+      (sombras, particulas, distancia de visao, resolucao de textura).
+      O jogo nao "pede" o que o aparelho nao tem.
+    - SERVIDOR PARA O QUE E VIVO: decisao de IA, geracao de mapa por
+      semente, eventos. (Respeitando o limite de requisicoes HTTP por
+      minuto do servidor do Roblox — e orcando o que cabe.)
+    - CARREGAR ANTES (PreloadAsync) para nao travar na hora de virar a fase.
+  Resumo honesto: "hibrido" aqui e OFFLINE + CLIENTE + SERVIDOR decidindo
+  juntos. Nao e placa de video a mais: e trabalho caro que sai do aparelho
+  do jogador e vai para onde e barato.
+
+
+PARTE 2 — APK: A ENGINE DO CELULAR (celular E PC, foco em Android fraco)
+------------------------------------------------------------------------
+O usuario: "nos podemos e vamos sim criar uma engine pra celular, ela sera
+pra celular e pc, focando em androids fracos, mas tem muita coisa que voce
+vai saber so quando chegarmos na parte de fazer ela".
+
+Certo — e por isso o caminho e por FASES, nao por promessa:
+  FASE 1 (ponte): o DsOS dirige as engines que ja existem (Godot, Blender,
+    Studio) pelo pilot. O usuario ja cria jogo hoje, com a IA olhando a tela.
+  FASE 2 (runtime ARKHER): camada propria por cima, leve, para 2D/2.5D e 3D
+    leve — vocacao, fisica de esqueleto, animacao, audio, entrada, e
+    EXPORTACAO para Android, Windows e Web. Alvo declarado: rodar bem em
+    aparelho fraco (o alvo real e o Itel A70; ver os numeros no DSOS.txt).
+  FASE 3 (editor): o usuario monta o jogo pelo celular e a IA escreve o
+    codigo — o mesmo loop verificado, agora dentro da engine.
+  Nao prometer: AAA, console, 60 fps em aparelho de 500 MHz de GPU.
+  Diferencial real da engine: IA dentro + exportar leve por padrao +
+  roda no proprio aparelho de quem desenvolve (Android fraco).
+
+
+A ROTA (onde a engine entra)
+----------------------------
+  1. Estudio funcionando (VM + agentes ligando facil)      <- item 1 e 3 da fila
+  2. Agente com maos (HUD controla Studio/Blender)          <- item 2 da fila
+  3. Loop verificado: gera, roda, le o erro, conserta       <- item 5 ✅
+     ENTREGUE (rodada 4): arkher_gamedev.js + teste_gamedev.js (119
+     verificacoes). 5 motores com leitor de erro proprio (Roblox/Luau,
+     Godot, Unity, Unreal, Blender). O diagnostico separa tres coisas que
+     nao sao a mesma: "rodou e deu erro", "NEM RODOU" (comando ausente,
+     sem tela, licenca, LUNE_NAO_INSTALADO) e "rodou limpo". O loop:
+     gera -> escreve -> roda na maquina -> le stdout+log -> conserta com o
+     ERRO EXATO no pedido seguinte -> roda de novo. So diz "pronto" com
+     execucao limpa; nunca com codigo de erro sem saida.
+     Regras de parada (economia de cota): mesmo erro 2x, motor que nem
+     roda, teto de rodadas, IA ilegivel 2x, sem maquina (recusa ANTES de
+     gastar: 0 chamadas). A IA do loop e de FUNDO por padrao (zero cota de
+     usuario). Interrompivel a qualquer rodada ("Parar").
+     Skills gd_loop / gd_erros / gd_esqueleto entram no catalogo — servem
+     para QUALQUER modelo da cascata, nao so um.
+     LIMITE DECLARADO: nao julga visual, jogabilidade nem fps; o Roblox
+     Studio pede login manual; sem maquina ele nao verifica (diz isso).
+  4. Jogo publicado + Retrofit de um jogo que ja existe
+  5. Runtime ARKHER (2D/2.5D/3D leve, exporta celular+PC+web)
+  6. Editor / Engine ARKHER (jogo feito sem escrever codigo)
+
+  A PROVA PUBLICA (a arena): mesma tarefa para um chat de ponta e para o
+  DsOS GameDev. Placar: entregou o jogo funcionando? quantas vezes o
+  usuario teve que intervir? quanto custou? em quanto tempo?
+  No tiro unico o modelo de ponta ganha. Em "terminar o jogo", quem tem
+  maos, loop e memoria ganha — e isso e medivel, nao opiniao.

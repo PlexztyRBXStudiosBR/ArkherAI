@@ -1,0 +1,25 @@
+{
+  "name": "ARKHER AI — chat, VM Windows e 3D",
+  "short_name": "ARKHER",
+  "description": "Chat com varias IAs em cascata, controle do PC Windows pelo Tailscale, tela remota (DsOS), geracao 3D e time compartilhado.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#0b0e15",
+  "theme_color": "#0b0e15",
+  "categories": ["utilities", "productivity", "developer"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Chat", "url": "./index.html?aba=chat", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Terminal da VM", "url": "./index.html?aba=term" },
+    { "name": "Tela remota (DsOS)", "url": "./index.html?aba=dsos" },
+    { "name": "Gerar 3D", "url": "./index.html?aba=tri" }
+  ]
+}

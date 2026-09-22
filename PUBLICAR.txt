@@ -1,0 +1,209 @@
+=========================================================
+        ARKHER AI — instalacao completa
+   site + login 2 contas + VM compartilhada + cascata
+=========================================================
+
+ARQUIVOS
+  index.html   interface (9 abas, icones SVG, zero emoji)
+  core.js      base (storage)
+  vault.js     cofre de tokens com rotacao
+  auth.js      login Supabase
+  sync.js      estado COMPARTILHADO entre as 2 contas
+  skills.js    capacidades compartilhadas (ferramentas)
+  app.js       cascata Puter -> HF Hub
+  ui.js        telas
+  agent.py     agente que roda na VM (porta 8765)
+  dsos_core.py DsOS Core: tela remota (porta 8766)
+  gerar3d.py   3D: texto/imagem -> .glb (aba 3D do site)
+  ws_min.py    WebSocket (tela e terminal ao vivo, sem polling)
+  manifest.webmanifest + sw.js + pwa.js + icons/  = o site instalado como app
+  arkher_kaggle.ipynb  no Kaggle com GPU (baixa os dois .py do repo)
+  .github/workflows/arkher.yml   sobe/salva/religa a VM
+
+=========================================================
+PASSO 1 — SUPABASE (login + compartilhamento)
+=========================================================
+1. supabase.com > New project
+2. Settings > API  -> copie Project URL e anon public key
+3. Authentication > Providers > Email: ATIVO
+   Desmarque "Confirm email" (entra na hora)
+
+4. SQL Editor > New query > cole TUDO isto > Run:
+
+--------------------------------------------------------
+create table if not exists arkher_state (
+  k text primary key,
+  v jsonb,
+  updated_at timestamptz default now()
+);
+create table if not exists arkher_log (
+  id bigserial primary key,
+  who text,
+  kind text,
+  txt text,
+  at timestamptz default now()
+);
+alter table arkher_state enable row level security;
+alter table arkher_log  enable row level security;
+
+-- so quem esta logado le/escreve
+create policy "logados leem estado"    on arkher_state
+  for select to authenticated using (true);
+create policy "logados escrevem estado" on arkher_state
+  for all to authenticated using (true) with check (true);
+create policy "logados leem log"       on arkher_log
+  for select to authenticated using (true);
+create policy "logados escrevem log"   on arkher_log
+  for insert to authenticated with check (true);
+--------------------------------------------------------
+
+5. abra o site > card "Configurar Supabase" > cole URL e
+   anon key > Salvar
+   (nao quer login? "Entrar sem login" = modo local, sem equipe)
+6. com a lista de e-mails VAZIA, clique "Criar conta":
+   uma vez com o SEU e-mail, outra com o do seu amigo
+7. agora preencha "E-mails com acesso" com os DOIS e Salvar
+   >> a partir daqui, so voces dois entram
+
+=========================================================
+PASSO 2 — PUBLICAR O SITE
+=========================================================
+OPCAO A — GitHub Pages (free exige repo publico)
+  1. suba os arquivos .html/.js no repo
+  2. Settings > Pages > Branch: main / (root) > Save
+  3. https://SEUUSUARIO.github.io/SEUREPO/
+
+OPCAO B — Netlify / Cloudflare Pages (repo privado, free)
+  arraste a pasta no painel. Leva 30 segundos.
+
+INSTALAR COMO APP (opcional, em qualquer uma das opcoes)
+  abra o site > icone de instalar no topo (ou menu > Instalar app).
+  Vira app de verdade: icone, tela cheia, atalhos por aba e abre offline.
+  Precisa de HTTPS (GitHub Pages e Netlify ja dao). Veja RECURSOS.txt.
+
+Mesmo com codigo publico o ACESSO fica fechado: o login e
+do Supabase e os tokens ficam no navegador de cada um.
+
+=========================================================
+PASSO 3 — A VM (voce e seu amigo, MESMA maquina)
+=========================================================
+1. no repo: Settings > Secrets > Actions > New secret
+      TAILSCALE_AUTH_KEY = chave de
+      login.tailscale.com/admin/settings/keys  (REUSABLE)
+2. Settings > Actions > General > Workflow permissions
+      "Read and write permissions"
+   + New secret PAT_TOKEN = Personal Access Token (escopo
+     "workflow"). Sem ele a VM NAO religa sozinha: o token
+     padrao do Actions nao tem permissao de disparar workflow.
+3. Actions > "ARKHER Sandbox" > Run workflow
+4. no step "COMO ACESSAR" copie  http://100.x.y.z:8765
+   (e http://100.x.y.z:8766 pra aba DsOS)
+5. Config > URL do agente > cole > Salvar
+6. aba VM > "Publicar minha VM"
+   >> pronto: seu amigo abre o site dele, aba VM,
+      "Usar a do time" e ja esta na MESMA maquina
+
+COMO FICA O TRABALHO EM DUPLA
+  - os dois veem o mesmo endereco da VM
+  - "Online agora" mostra quem esta conectado
+  - "Atividade do time" mostra o que cada um rodou
+  - TRAVA: se um esta rodando comando, o outro recebe
+    "VM ocupada por fulano" em vez de atropelar
+  - para a TELA (Roblox Studio): app Remote Desktop da
+    Microsoft, endereco Tailscale, usuario nexus, senha
+    no log do workflow. Os dois podem usar o RDP.
+
+=========================================================
+PASSO 4 — COFRE DE TOKENS (suas varias contas)
+=========================================================
+Config > Cofre de tokens
+Cadastre o token de CADA conta sua (HF e Puter).
+Quando um estoura cota eu passo pro proximo sozinho;
+todos voltam a valer no dia seguinte (reset automatico).
+
+=========================================================
+AS 7 ABAS
+=========================================================
+ Chat         conversa; a IA chama ferramentas sozinha
+ Sandbox      terminal da VM, saida ao vivo, com trava
+ Capacidades  o que TODAS as IAs podem fazer
+ 3D           gera 3D com o melhor motor do dia
+ VM           specs, equipe, tela remota, armazenamento
+ Integracoes  atalhos (Blender, Studio, git, ffmpeg)
+ Config       cofre, tokens, agente, conta
+
+=========================================================
+O QUE E VERDADE, SEM ENROLACAO
+=========================================================
+1. OS 2.5 MILHOES DE MODELOS
+   O Hub tem 2.5M, mas a maioria e arquivo de peso sem
+   servidor. Chamaveis por API AGORA: ~1000 (verifiquei).
+   Modelos 3D (TRELLIS, Hunyuan3D, TripoSR): ZERO tem API
+   de inferencia. Por isso 3D roda NA VM. E a VM nao tem
+   GPU: funciona em CPU, porem lento (minutos por objeto).
+
+2. "TODAS AS IAS COM AS MESMAS CAPACIDADES"
+   Feito via ferramentas: toda IA da cascata recebe o mesmo
+   conjunto (gerar_3d, render_blender, rodar_vm...).
+   O fable-5 nao VIRA Hunyuan3D — ele CHAMA o Hunyuan3D.
+   O resultado pratico e o que voce quer; o nome honesto
+   disso e orquestracao, nao fusao de modelos.
+
+3. CONTAS GOOGLE COMO ARMAZEM DE TOKEN
+   Conta Google nao emite token de HF nem de Puter.
+   O Cofre resolve o problema real: voce cadastra os tokens
+   que JA TEM e eu rotaciono. Isso e legitimo.
+   Para ARQUIVOS (Drive/MediaFire): rclone, na aba VM.
+
+4. DISCO DA VM
+   Os ~219GB somem quando o runner cai. O que precisa
+   sobreviver vai pro cache (arkher_state) ou pro Drive.
+
+5. GITHUB ACTIONS 24/7
+   Nao e o uso previsto. Repo privado gasta os 2.000
+   min/mes e depois cobra; publico pode dar suspensao.
+   A decisao e sua — o sistema funciona dos dois jeitos.
+
+
+================================================================
+ABA PILOTO — a IA opera a VM olhando a tela
+================================================================
+Voce escreve "abre o Roblox Studio e cria um baseplate" e ela faz,
+clicando de verdade. O loop e:
+
+   print da tela -> modelo com visao decide -> clica/digita -> print de novo
+
+Ate 25 passos. Voce ve o raciocinio e cada acao na hora.
+
+ROTAS NOVAS DO AGENTE
+  GET  /screen?scale=&q=   print da tela em base64 (os OLHOS)
+  POST /input              mouse, teclado, arrastar, scroll (as MAOS)
+  POST /app                abre programa por nome (roblox, blender...)
+  GET  /guiready           checa se existe sessao grafica ativa
+
+IMPORTANTE — A TELA PRETA
+O runner do GitHub roda como servico, SEM ninguem logado na tela.
+Sem sessao grafica o print sai preto e o clique nao vai a lugar nenhum.
+O workflow ja arma autologon do usuario "nexus" e desliga o bloqueio de
+tela, mas na PRIMEIRA sessao conecte por RDP uma vez. Se precisar forcar:
+
+   tscon 1 /dest:console
+
+(isso joga a sessao do RDP pro console e ela continua viva depois que
+voce desconecta)
+
+MODELOS
+So entram na cascata modelos que enxergam imagem: fable-5, gpt-4o,
+claude, gemini, Qwen-VL, llava, Llama-4-Scout etc. O filtro e automatico.
+
+VELOCIDADE
+Cada passo leva 4 a 8 segundos (print + modelo pensando + acao).
+Tarefa de 10 passos = ~1 minuto. E autonomo, nao e instantaneo.
+
+ROBLOX STUDIO
+Instala sozinho, mas o login na conta Roblox e MANUAL. A IA para na tela
+de login e te avisa. Loga uma vez por RDP e depois ela trabalha sozinha.
+
+A TRAVA VALE AQUI TAMBEM
+Se seu amigo estiver pilotando, voce recebe "VM ocupada por fulano" em
+vez de dois mouses brigando pelo mesmo cursor.

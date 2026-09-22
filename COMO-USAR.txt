@@ -1,0 +1,292 @@
+=========================================================
+  ARKHER — site de IA + Sandbox Windows (o "Termux visual")
+=========================================================
+
+A MAQUINA DO SANDBOX
+  E a mesma VM do workflow que voce mandou:
+     runner windows-latest do GitHub (4 vCPU · 16 GB RAM · ~14 GB livres)
+     -> as specs reais aparecem na aba VM e no step "Preparar" do log
+  Nao e emulador: e Windows de verdade, entao roda Blender,
+  ffmpeg, Python, Node e Roblox Studio nativamente.
+
+---------------------------------------------------------
+PARTE 1 — O SITE (2 min)
+---------------------------------------------------------
+1. abra index.html (ou publique no GitHub Pages / Netlify)
+2. aba Config > "Entrar no Puter"   (login gratis = lista 1)
+3. aba Config > cole o token do Hugging Face  (= lista 2)
+      huggingface.co/settings/tokens > New token > Read
+4. use o Chat
+   (sem Supabase, clique "Entrar sem login" na tela inicial:
+    modo local, tudo fica so no seu navegador)
+
+A IA NUNCA PARA:
+  lista 0 = VIA GRATIS do Puter (:free)  <- nao gasta saldo nenhum
+  lista 1 = catalogo VIVO do Puter       (~1000 modelos)
+  lista 1B= provedores gratis com chave sua (Gemini, Groq, Cerebras...)
+  lista 2 = catalogo VIVO do HF Hub      (~1000 modelos "live")
+  modelo falhou -> proximo. Lista 1 toda falhou -> lista 2.
+  Quem deu erro entra em quarentena e sai da roda.
+  401 no Puter (conta fora) -> pula DIRETO pra lista 2.
+
+---------------------------------------------------------
+DEU "LOW BALANCE" NO PUTER? (o saldo da conta acabou)
+---------------------------------------------------------
+Aconteceu isso? Nao precisa largar o Puter. O ARKHER contorna
+sozinho, em 3 camadas, e ainda da pra voce reforcar:
+
+1) CAMADA QUE JA VEM LIGADA - a via gratis do Puter
+   O catalogo do Puter tem modelos gratuitos: os que terminam em
+   ":free" (sao os gratuitos do OpenRouter revendidos por ele).
+   Eles NAO gastam saldo: respondem com a conta zerada.
+   Quando o ARKHER leva o primeiro "low balance" ele:
+     a) marca a conta como sem-saldo (ela continua valendo, nao e banida);
+     b) tenta outra conta sua do armazem que ainda tenha saldo;
+     c) nao tendo outra, repete o SEU pedido num modelo ":free" e
+        a resposta chega do mesmo jeito - sem erro na tela;
+     d) e da rodada seguinte em diante ja entra pela via gratis.
+   O saldo voltou? Clique em Config > "Ja coloquei credito" (ou
+   "Checar saldo") que ele volta pro catalogo completo.
+
+2) CAMADA RECOMENDADA - 2 ou 3 chaves GRATIS suas (Config >
+   "Provedores gratis"). Nenhuma cobra cartao e cada uma tem cota
+   diaria propria. Com elas o chat nunca depende de saldo nenhum:
+     Google AI Studio (Gemini) .. 1.500 req/dia  - e enxerga imagem
+     Groq ....................... 1.000 req/dia  - o mais rapido
+     Cerebras ................... 1M tokens/dia - absurdamente rapido
+     OpenRouter (:free) ......... 50 req/dia    - modelos :free
+     Mistral .................... ~1B tokens/mes
+     GitHub Models .............. 150-1.000 req/dia (usa o seu PAT)
+     NVIDIA NIM ................. ~1.000 req/dia
+     Cloudflare Workers AI ...... 10.000 neurons/dia
+     Ollama / LM Studio ......... ilimitado, offline, na sua maquina
+   Cole a chave, clique Adicionar: ele ja testa e ja entra na fila.
+   Pode colar VARIAS chaves (uma por linha): quando uma esgota, gira.
+
+3) CAMADA QUE VOCE JA TEM - mais contas no armazem
+   Config > "Contas Puter que voce ja tem": entre com a proxima conta,
+   "Capturar conta logada". Cada conta e uma cota a mais.
+
+E nao pode faltar: Config > "Teto de tokens por resposta".
+  Sem teto, o Puter usa o MAXIMO do modelo em cada resposta - e o
+  jeito mais rapido de torrar o saldo. 2048 cobre quase tudo.
+
+Modo de gasto (Config, no topo):
+  automatico = gratis primeiro, saldo so quando compensa
+  so gratis  = nunca gasta saldo do Puter (cascata 100% gratuita)
+  completo   = usa tudo, inclusive Puter pago e credito do HF
+
+ENCHE O ARMAZEM DE COTA (o jeito que nao derruba a sua conta):
+  1. as contas que voce JA tem: entre no Puter com a proxima conta,
+     "Capturar conta logada". Cada login = 1 conta no armazem.
+     Config > "Exportar armazem" leva todas de um celular/PC pro outro
+     (o arquivo tem tokens: trate como senha).
+  2. uma chave gratis por provedor (Gemini, Groq, Cerebras, Mistral,
+     GitHub, NVIDIA, Cloudflare, OpenRouter) - o painel soma tudo e
+     mostra a "Capacidade do armazem" em pedidos/dia.
+  3. armazem compartilhado (Supabase): quem entra no site loga com a
+     PROPRIA conta e a cota dela entra no bolo. 650 cotas = 650 pessoas
+     reais (e o modelo do proprio Puter: cada um paga o seu).
+  4. maquina sua: Kaggle (~30h de GPU/semana) e Ollama/LM Studio no PC
+     nao tem limite de requisicao.
+
+  E nao caia na tentacao de "criar 650 contas com email descartavel +
+  proxy": a cota do Puter e por conta + IP + impressao digital, o
+  cadastro em massa e detectado, o ban vem em bloco (leva a sua conta
+  principal junto) e proxy gratis e lista publica - tudo que passa por
+  la e legivel, inclusive o token da sua conta. Duas chaves gratis
+  (Gemini + Groq) ja valem ~2.500 pedidos/dia, sem risco nenhum.
+
+Teste tudo de uma vez, sem navegador: node teste_cascata.js
+
+---------------------------------------------------------
+PARTE 2 — O SANDBOX
+---------------------------------------------------------
+A) No seu repositorio GitHub:
+   1. copie pra raiz:  agent.py, dsos_core.py  e  .github/workflows/arkher.yml
+   2. Settings > Secrets and variables > Actions > New secret
+         TAILSCALE_AUTH_KEY = chave de
+         login.tailscale.com/admin/settings/keys
+         >> marque REUSABLE, senao so funciona uma vez
+   3. Settings > Actions > General > Workflow permissions
+         marque "Read and write permissions"
+         (sem isso o cache de estado nao salva)
+   4. Settings > Secrets > New secret
+         PAT_TOKEN = Personal Access Token com escopo "workflow"
+         (github.com/settings/tokens). E ELE que religa a VM ao
+         fim das 6h; o GITHUB_TOKEN padrao NAO pode disparar workflow.
+
+B) Actions > "ARKHER Sandbox" > Run workflow     <- so a 1a vez
+
+C) No step "COMO ACESSAR" aparece:
+         http://100.x.y.z:8765   -> Config > "URL do agente" > Salvar
+         http://100.x.y.z:8766   -> aba DsOS > Conectar (tela remota)
+   e a senha do RDP (usuario nexus) pra ver a tela pelo Remote Desktop
+
+D) Aba Sandbox > Conectar. Agora e so digitar.
+
+   python -V
+   blender --version
+   Get-ChildItem C:\
+   ia: liste os 10 maiores arquivos do disco C
+       ^ a IA escreve o PowerShell e executa sozinha
+
+   Comandos longos (blender, ffmpeg, git clone, pip install)
+   viram JOB em background e a saida aparece AO VIVO, linha
+   por linha. Nao trava a tela.
+
+---------------------------------------------------------
+RELIGA SOZINHO — como funciona
+---------------------------------------------------------
+  - limite do runner e 6h (regra do GitHub, ninguem burla)
+  - o workflow sai aos 5h50, de proposito, antes do corte
+  - a cada 2 min o agente salva sozinho (SNAPSHOT.json)
+  - ao sair: salva arkher_state no cache do Actions
+  - e dispara a proxima sessao com o PAT_TOKEN (3 tentativas)
+  - cron a cada 5h como rede de seguranca
+  => voce aperta Run workflow UMA vez. Depois ele se vira.
+
+  O QUE CONTINUA ENTRE SESSOES:
+     arkher_state/work/       seus arquivos
+     arkher_state/history.jsonl   tudo que voce digitou
+     arkher_state/SNAPSHOT.json   estado da maquina
+  O QUE NAO CONTINUA:
+     programas instalados (o choco reinstala todo inicio)
+     o IP do Tailscale pode mudar -> reveja o log
+
+  DICA: em vez do IP, use o nome da maquina (arkher-windows)
+  se voce ativar o MagicDNS no Tailscale.
+
+---------------------------------------------------------
+O QUE EU NAO POSSO GARANTIR (sem enrolacao)
+---------------------------------------------------------
+  1. POLITICA DO GITHUB
+     Usar Actions como servidor 24/7 nao e o uso previsto.
+     Repo PRIVADO gasta minutos (2.000/mes gratis; 24/7 passa
+     e vira cobranca). Repo PUBLICO e "ilimitado", mas a conta
+     pode ser suspensa se acharem abuso. A decisao e sua.
+
+  2. ROBLOX STUDIO
+     O instalador roda, mas ABRIR projeto exige login na conta
+     Roblox — e nao da pra automatizar isso pelo workflow.
+     Blender, ffmpeg, git e Python funcionam sem ressalva.
+
+  3. CORS
+     Sites que bloqueiam origem externa nao respondem ao
+     navegador. Use o Sandbox: o agente nao tem esse limite.
+
+  4. TELA (Piloto e DsOS)
+     O runner do Actions nao tem ninguem logado no console.
+     O workflow configura autologon, mas na 1a sessao conecte
+     por RDP uma vez. Print preto = rode  tscon 1 /dest:console
+
+  5. HTTPS x HTTP
+     Site em GitHub Pages (https) chamando o agente em http:
+     o Chrome bloqueia. Cadeado > Configuracoes do site >
+     "Conteudo nao seguro: Permitir". Ou abra o site local.
+
+---------------------------------------------------------
+MODELOS DE PONTA NO NO COM GPU (hf_hub.py)
+---------------------------------------------------------
+  O HF nao da mais serverless de graca. Entao o modelo roda na
+  GPU do Kaggle (ou do PC). No site:
+
+    aba Cerebro > treinar/estudar   -> o que este no pode rodar
+    aba VM > cartao RDP             -> entrar na tela pelo app
+    aba VM > no Kaggle              -> URL do no (porta 8765)
+
+  Direto no agente:
+    GET  /infer                    catalogo real (GPU, VRAM, libs)
+    POST /infer   {tarefa,...}     chat, imagem, embed, asr, depth, fundo, upscale
+    POST /treinar {jsonl,...}      treina o SEU LoRA no dataset do site
+    GET  /node                     IP do Tailscale, porta, usuario/estado do RDP
+
+  E o no do Kaggle tambem religa sozinho: o religa_kaggle.py empurra o
+  notebook pelo API do Kaggle quando a sessao morre (precisa dos secrets
+  KAGGLE_USERNAME e KAGGLE_KEY). Cota: ~30 h de GPU por semana.
+
+---------------------------------------------------------
+ARQUIVOS
+---------------------------------------------------------
+  index.html   interface (icones SVG proprios, zero emoji)
+  enxame.js    varias IAs na mesma pergunta (papeis + critica + agregacao)
+  neural.js    memoria neural (licoes, busca por significado, dataset, DPO)
+  memoria.js   memoria compartilhada (chats, abas, IAs e VMs no mesmo quadro)
+  conhecimento.js  pacote de game dev que entra no prompt
+  cerebro_ui.js    a aba Cerebro (memoria, treino, enxame, RDP)
+  app.js       cascata dupla Puter -> HF -> no com GPU + quarentena
+  ui.js        chat, terminal com streaming, integracoes
+  agent.py     agente (Windows/Linux/Termux, so stdlib) porta 8765
+  dsos_core.py DsOS Core (tela + entrada + sistema)     porta 8766
+  gerar3d.py   3D: texto/imagem -> .glb                 (chamado pelo agente)
+  ws_min.py    WebSocket minimo (tela/terminal ao vivo)
+  .github/workflows/arkher.yml   sobe, salva e RELIGA sozinho
+
+3D (aba 3D)
+  - precisa do no com o gerar3d.py: rode a celula 5 do notebook do Kaggle
+    (ou o workflow do Windows, que ja instala o Shap-E)
+  - aba 3D > Ver motores > escolha o no > Gerar
+  - sai o preview na tela e o .glb pra baixar
+  - no Kaggle/PC com GPU use TripoSR (imagem -> 3D, malha limpa);
+    sem GPU o Shap-E roda na CPU, devagar
+  - detalhes, tamanhos e o que eu testei: RECURSOS.txt
+
+APP (celular ou PC)
+  - Chrome/Edge: botao de instalar no topo do site (menu > Instalar app)
+  - Android: menu > Adicionar a tela inicial | iPhone: Compartilhar > Adicionar
+  - depois: icone proprio, tela cheia, atalhos por aba e abre offline
+  - precisa de HTTPS (GitHub Pages serve)
+
+ENXAME (varias IAs juntas)
+  - aba Cerebro > Enxame: liga/desliga no chat, escolhe quantas IAs (2 a 100),
+    e "Rodar conselho" testa na hora com a pergunta que voce digitar
+  - cada IA recebe o papel em que e melhor e TODAS tem as mesmas ferramentas
+    (3D, comando na VM, arquivo, web, memoria)
+  - a resposta final e a fusao do melhor de todas (com critica no meio)
+  - quem ganha mais naquele tipo de pedido sobe na fila; os pares
+    escolhido/rejeitado viram treino de preferencia (DPO)
+  - atencao ao custo: 100 IAs = 100 chamadas de modelo numa pergunta
+
+MEMORIA COMPARTILHADA (o que ja foi descoberto)
+  - aba Cerebro > Memoria compartilhada: busca, lista, "Puxar do no",
+    "Enviar pro no", "Sincronizar aparelhos" e "Nova sessao de chat"
+  - ela enche sozinha: as ferramentas anotam o que rodaram, o chat anota
+    pergunta/resposta, o enxame anota as descobertas dos agentes
+  - a IA tambem usa: ferramenta "memoria" com acao buscar|anotar
+  - o no guarda em /memoria (sobrevive a VM cair); entre aparelhos vai
+    pelo Supabase se voce usa login
+  - senha/token NUNCA entram (marca sigilo e a auto-captura descarta)
+  - "Buscar (por significado)": acha pelo sentido (sinônimo, erro de
+    digitacao), nao so pela palavra exata; "Indexar agora" recalcula os
+    vetores (100% no navegador, sem rede)
+  - "Destilar em regras": transforma o quadro em regras curtas que entram
+    SEMPRE no prompt (aprendizado permanente sem GPU). Ligue o checkbox
+    pra rodar sozinho de 10 em 10 min; "Ver regras aprendidas" mostra o
+    que ja foi aprendido
+
+CEREBRO NO NO (treino automatico com GPU)
+  - aba Cerebro > "Enviar cerebro pro no" (manda licoes + preferencias)
+  - "Treinar sozinho no no" liga o automatico: juntou 40 amostras novas,
+    ele treina e vira gpu:local:<nome> no chat
+  - "Ver o que o no sabe" mostra quantas amostras e quais modelos existem
+  - no Kaggle: celula 2d do notebook liga isso e mantem o no acordado
+
+VELOCIDADE (ja esta ligada, nao precisa fazer nada)
+  - a tela e a saida de comando vao por WebSocket (sem polling)
+  - se o no for uma versao antiga, o site cai sozinho pro modo antigo
+
+API DO AGENTE (se quiser usar direto)
+  GET  /health   GET /jobs   GET /job?id=&from=
+  POST /exec     POST /spawn  POST /kill
+  GET  /ls?path= GET /cat?path=  POST /write
+  GET  /history  POST /snapshot
+  GET  /infer    POST /infer   POST /treinar   GET /node
+  GET  /dataset  POST /dataset  POST /dataset/auto   (o cerebro do no)
+  GET  /memoria  POST /memoria  POST /memoria/podar   (memoria compartilhada)
+  GET  /ws?canal=frames|job|cmd   (WebSocket)
+  GET  /gerar3d  POST /gerar3d  POST /gerar3d/instalar
+  GET  /file?path=&dl=   (glb/png/json)
+  GET  /screen?scale=&q=   GET /guiready
+  POST /input {acts:[{do:move|click|dblclick|right|drag|scroll|type|key|hotkey|wait|app,...}]}
+  POST /app {nome|caminho}
+  Caminhos relativos caem em arkher_state/work.
