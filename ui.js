@@ -1990,4 +1990,313 @@ if(Auth.ativo()) boot();
       q + ' · ' + (DsC.stream.escala || 100) + '%' +
       (DsC.cursor.modo === 'mouse' ? ' · mouse' : ' · toque');
   }
-  function iniciar() …
+  function iniciar() {
+    mostrarTela(true);
+    DsC.ligarVista(img, $('#dsr-zoom'), $('#dsr-cursor'));
+    DsC.ligarEntrada(img, $('#dsr-zoom'));
+    DsC.setQualidade(DsC.qual);
+    DsC.iniciarStream(img,
+      err => { estado('tela indisponivel', false); msg.textContent = err; mostrarTela(false); },
+      (fps, ms) => { pintaLinha(fps, ms); pintaGirar(); });
+  }
+  $('#dsr-go').onclick = conectar;
+  $('#dsr-cfg2').onclick = () => { DsC.pararStream(); mostrarTela(false); };
+  /* ---------- controles da tela: mouse/toque, encaixe, zoom, qualidade ---------- */
+  const bCursor = $('#dsr-mouse'), bFit = $('#dsr-fit'), selQ = $('#dsr-q');
+  function pintaBotaoCursor() {
+    if (bCursor) bCursor.textContent = DsC.cursor.modo === 'mouse' ? 'Mouse ✓' : 'Mouse';
+  }
+  function pintaBotaoFit() { if (bFit) bFit.textContent = DsC.rotuloVista(DsC.vista.modo); }
+  if (bCursor) bCursor.onclick = () => {
+    DsC.setCursorModo(DsC.cursor.modo === 'mouse' ? 'toque' : 'mouse');
+    pintaBotaoCursor(); pintaLinha();
+    if (DsC.cursor.modo === 'mouse')
+      msg.textContent = 'Cursor de mouse ligado: arraste o dedo para mover, toque curto = clique, toque longo = botao direito. Dois dedos = mover a tela/zoom.';
+  };
+  if (bFit) bFit.onclick = () => { DsC.cicloVista(); pintaBotaoFit(); };
+  if (selQ) { selQ.value = DsC.qual; selQ.onchange = () => { DsC.setQualidade(selQ.value); pintaLinha(); }; }
+  const bZmais = $('#dsr-zp'), bZmenos = $('#dsr-zm');
+  if (bZmais) bZmais.onclick = () => DsC.zoom(1.25);
+  if (bZmenos) bZmenos.onclick = () => DsC.zoom(0.8);
+  /* tela cheia: usar Studio/Blender sem a barra do site comendo a tela */
+  const bFull = $('#dsr-full'), avisoGirar = $('#dsr-girar');
+  function pintaFull() { if (bFull) bFull.textContent = DsC.emTelaCheia() ? 'Sair' : 'Tela'; }
+  if (bFull) bFull.onclick = async () => {
+    const r = await DsC.telaCheia();
+    if (!r.ok && msg) msg.textContent = r.erro;
+    pintaFull();
+  };
+  if (avisoGirar) {
+    const bx = $('#dsr-girar-x');
+    if (bx) bx.onclick = async () => {
+      const r = await DsC.travarPaisagem();
+      if (msg) msg.textContent = r.ok ? 'deitado e travado em paisagem' : r.erro;
+    };
+  }
+  function pintaGirar() {
+    if (avisoGirar) avisoGirar.style.display = DsC.precisaGirar() ? 'flex' : 'none';
+  }
+  if (window.addEventListener) window.addEventListener('orientationchange', () => setTimeout(() => { pintaGirar(); DsC.recalcular(); }, 250));
+  if (document.addEventListener) document.addEventListener('fullscreenchange', pintaFull);
+  pintaFull();
+  DsC.onQualidade = (n, p, motivo) => {
+    if (selQ && String(n).indexOf('auto') === 0) selQ.value = 'auto';
+    pintaLinha();
+    if (motivo && msg) msg.textContent = 'Qualidade ' + motivo;
+  };
+  DsC.onCursorModo = pintaBotaoCursor;
+  pintaBotaoCursor(); pintaBotaoFit();
+  $('#dsr-boot').onclick = async function () {
+    this.disabled = true; const txt = this.textContent; this.textContent = 'ligando...';
+    try {
+      const r = await DsC.boot();
+      if (r.ok) {
+        estado('desktop no ar · ' + (r.modo || ''), true);
+        if (r.faltando && r.faltando.length)
+          alert('DsOS subiu, mas faltam pacotes no backend: ' + r.faltando.join(', ') +
+                '\nInstale-os no notebook/workflow para tela e entrada completas.');
+        iniciar();
+      } else {
+        estado('nao subiu', false);
+        alert('Nao consegui subir a sessao grafica: ' + (r.erro || '?') +
+              (r.faltando ? '\nFaltando: ' + r.faltando.join(', ') : ''));
+      }
+    } catch (e) { alert('erro: ' + e.message); }
+    this.disabled = false; this.textContent = txt;
+  };
+  function abrirGaveta(titulo) { drawT.textContent = titulo; draw.style.display = 'flex'; }
+  $('#dsr-draw-x').onclick = () => { draw.style.display = 'none'; };
+  $('#dsr-apps').onclick = async () => {
+    abrirGaveta('Apps instalados'); drawB.innerHTML = '<p style="color:var(--dim);font-size:12px">lendo...</p>';
+    try {
+      const j = await DsC.apps();
+      const a = j.apps || [];
+      if (!a.length) {
+        drawB.innerHTML = '<p style="color:var(--dim);font-size:12px;line-height:1.6">' +
+          'Nenhum app grafico instalado neste backend.<br><br>' +
+          'Isso e real, nao um erro: o DsOS so lista o que existe de verdade na maquina. ' +
+          'Instale no notebook/workflow (ex: blender, xterm) e recarregue.</p>';
+        return;
+      }
+      drawB.innerHTML = '';
+      a.forEach(x => {
+        const d = document.createElement('div');
+        d.className = 'dsr-it';
+        d.innerHTML = '<svg class="ico"><use href="#i-cube"/></svg><span class="nm"></span>';
+        d.querySelector('.nm').textContent = x.nome;
+        d.onclick = async () => { await DsC.abrir(x.bin); draw.style.display = 'none'; };
+        drawB.appendChild(d);
+      });
+    } catch (e) { drawB.innerHTML = '<p style="color:#ff9b9b;font-size:12px">' + e.message + '</p>'; }
+  };
+  const hud = $('#hud');
+  $('#dsr-hud').onclick = () => {
+    hud.style.display = hud.style.display === 'none' ? 'block' : 'none';
+  };
+  hud.querySelectorAll('button[data-k]').forEach(b => {
+    b.onclick = e => { e.preventDefault(); DsC.tecla(b.dataset.k); };
+  });
+  $('#dsr-kb').onclick = () => {
+    const t = prompt('Texto para digitar no DsOS:');
+    if (t) DsC.texto(t);
+  };
+  // teclado fisico: clique na tela remota e digite
+  img.tabIndex = 0;
+  DsC.teclado(img);
+  img.addEventListener('mousedown', () => img.focus());
+  // reconecta sozinho se ja tinha endereco salvo
+  if (DsC.url()) setTimeout(conectar, 2000);
+})();
+/* ===== Compute Manager (item 17) + HUD configuravel (item 7) + gestos ===== */
+(function () {
+  const $ = s => document.querySelector(s);
+  if (!window.CM || !$('#cm-pane')) return;
+  const pane = $('#cm-pane'), corpo = $('#cm-b');
+  function tag(txt, ok) {
+    return '<span class="tg ' + (ok === true ? 'on' : ok === false ? 'off' : '') + '">' + txt + '</span>';
+  }
+  async function pintar() {
+    corpo.innerHTML = '<p style="color:var(--dim);font-size:12px">sondando backends...</p>';
+    const l = await CM.sondarTodos();
+    corpo.innerHTML = '';
+    l.forEach(b => {
+      const d = document.createElement('div');
+      d.className = 'cmb';
+      const c = b.cap || {}, cp = c.compat || {}, h = c.hw || {};
+      const on = b.online;
+      let tags = '';
+      if (on) {
+        tags += tag('Linux', !!(cp.linux || {}).ok);
+        tags += tag('Windows' + ((cp.windows || {}).via === 'wine' ? ' (Wine)' : ''), !!(cp.windows || {}).ok);
+        tags += tag('Android', !!(cp.android || {}).ok);
+        tags += tag('Tela', !!c.tela);
+        tags += tag('Entrada', !!c.entrada);
+        tags += tag('GPU CUDA', !!c.gpu_compute);
+      }
+      d.innerHTML =
+        '<div class="cmb-t"><span class="dot' + (on ? ' on' : '') + '"></span>' +
+        '<b></b><span class="grow"></span>' +
+        (b.tipo === 'browser' ? '' : '<button class="mini" data-rm="' + b.id + '">remover</button>') +
+        '</div>' +
+        '<div class="cmb-hw"></div>' +
+        '<div class="cmb-tags">' + tags + '</div>';
+      d.querySelector('b').textContent = b.nome;
+      d.querySelector('.cmb-hw').textContent = CM.resumo(b.id);
+      corpo.appendChild(d);
+    });
+    corpo.querySelectorAll('[data-rm]').forEach(b => {
+      b.onclick = () => { CM.remover(b.dataset.rm); pintar(); };
+    });
+    // onde cada tarefa vai cair AGORA
+    const box = document.createElement('div');
+    box.className = 'cmb';
+    let html = '<div class="cmb-t"><b>Para onde vai cada tarefa</b></div><div class="cmb-hw">';
+    Object.keys(CM.tarefas).forEach(k => {
+      const r = CM.rotear(k);
+      html += CM.tarefas[k].nome + ' &rarr; ' +
+        (r.ok ? '<span style="color:#8ae3ae">' + r.backend.nome + '</span>'
+              : '<span style="color:#ff9b9b">' + r.motivo + '</span>') + '<br>';
+    });
+    box.innerHTML = html + '</div>';
+    corpo.appendChild(box);
+  }
+  $('#dsr-cm').onclick = () => { pane.style.display = 'flex'; pintar(); };
+  $('#cm-x').onclick = () => { pane.style.display = 'none'; };
+  $('#cm-scan').onclick = pintar;
+  $('#cm-add').onclick = () => {
+    const n = $('#cm-nome').value.trim(), u = $('#cm-url').value.trim();
+    if (!n || !u) { alert('preencha nome e endereco'); return; }
+    CM.add(n, u); $('#cm-nome').value = ''; $('#cm-url').value = ''; pintar();
+  };
+  // o endereco do DsOS conectado alimenta o backend correspondente
+  if (window.DsC && DsC.url()) {
+    const l = CM.lista();
+    const alvo = l.find(b => b.tipo === 'dsos' && !b.url);
+    if (alvo) CM.setUrl(alvo.id, DsC.url());
+  }
+  /* ---------- HUD configuravel ---------- */
+  const hud = $('#hud');
+  const CH = 'dsos_hud';
+  function carregar() {
+    return (window.LS ? LS.get(CH, null) : null) ||
+      [{ k: 'Up', r: '\u25B2' }, { k: 'Left', r: '\u25C0' }, { k: 'Right', r: '\u25B6' },
+       { k: 'Down', r: '\u25BC' }, { k: 'Return', r: 'OK' }, { k: 'Escape', r: 'ESC' },
+       { k: 'Tab', r: 'TAB' }, { k: 'super', r: 'MENU' }, { k: 'BackSpace', r: '\u232B' }];
+  }
+  function salvar(l) { if (window.LS) LS.set(CH, l); }
+  function montarHud() {
+    const l = carregar();
+    const dpad = hud.querySelector('.hud-dpad'), btns = hud.querySelector('.hud-btns');
+    const dir = ['Up', 'Left', 'Right', 'Down'];
+    btns.innerHTML = '';
+    l.filter(x => dir.indexOf(x.k) < 0).forEach(x => {
+      const b = document.createElement('button');
+      b.textContent = x.r; b.dataset.k = x.k;
+      b.onclick = e => { e.preventDefault(); if (window.DsC) DsC.tecla(x.k); };
+      btns.appendChild(b);
+    });
+    dpad.querySelectorAll('button').forEach(b => {
+      b.onclick = e => { e.preventDefault(); if (window.DsC) DsC.tecla(b.dataset.k); };
+    });
+  }
+  montarHud();
+  /* ---------- conjuntos prontos: Roblox Studio, Blender, desktop ---------- */
+  const selPreset = $('#hud-preset');
+  if (selPreset && window.HUD) {
+    HUD.montarSelect(selPreset);
+    selPreset.onchange = () => {
+      const n = selPreset.value;
+      if (!n) return;
+      HUD.aplicar(n);
+      montarHud();
+      const d = HUD.presets[n].dica;
+      if (d) $('#dsr-msg').textContent = d;
+    };
+  }
+  const hudMouse = $('#hud-mouse'), hudTela = $('#hud-tela'), hudX = $('#hud-x');
+  function pintaHudMouse() { if (hudMouse) hudMouse.textContent = (window.DsC && DsC.cursor.modo === 'mouse') ? 'Mouse ✓' : 'Mouse'; }
+  if (hudMouse) hudMouse.onclick = e => {
+    e.preventDefault();
+    DsC.setCursorModo(DsC.cursor.modo === 'mouse' ? 'toque' : 'mouse');
+    pintaHudMouse();
+  };
+  if (hudTela) hudTela.onclick = async e => { e.preventDefault(); const r = await DsC.telaCheia(); if (!r.ok) alert(r.erro); };
+  if (hudX) hudX.onclick = e => { e.preventDefault(); hud.style.display = 'none'; };
+  pintaHudMouse();
+  let editor = null;
+  $('#dsr-hudcfg').onclick = function () {
+    if (editor) { editor.remove(); editor = null; return; }
+    editor = document.createElement('div');
+    editor.className = 'hud-edit';
+    editor.innerHTML = '<input id="he-r" placeholder="rotulo (ex: F5)">' +
+      '<input id="he-k" placeholder="tecla (ex: F5, ctrl+s)">' +
+      '<button class="mini" id="he-add">adicionar</button>' +
+      '<span id="he-l" style="display:flex;gap:5px;flex-wrap:wrap"></span>';
+    $('#dsr-tela').appendChild(editor);
+    const lista = editor.querySelector('#he-l');
+    function pintaL() {
+      lista.innerHTML = '';
+      carregar().forEach((x, i) => {
+        const c = document.createElement('span');
+        c.className = 'hud-chip';
+        c.innerHTML = '<span></span><button>&times;</button>';
+        c.querySelector('span').textContent = x.r + ' = ' + x.k;
+        c.querySelector('button').onclick = () => {
+          const l = carregar(); l.splice(i, 1); salvar(l); montarHud(); pintaL();
+        };
+        lista.appendChild(c);
+      });
+    }
+    pintaL();
+    editor.querySelector('#he-add').onclick = () => {
+      const r = editor.querySelector('#he-r').value.trim();
+      const k = editor.querySelector('#he-k').value.trim();
+      if (!r || !k) { alert('preencha rotulo e tecla'); return; }
+      if (!/^[A-Za-z0-9+_-]+$/.test(k)) { alert('tecla invalida. Use letras, numeros e +'); return; }
+      const l = carregar(); l.push({ k, r }); salvar(l); montarHud(); pintaL();
+      editor.querySelector('#he-r').value = ''; editor.querySelector('#he-k').value = '';
+    };
+  };
+  /* ---------- pinch e dois dedos na tela remota ---------- */
+  const img = $('#dsr-img');
+  if (img && window.DsC && !img._gestos) {
+    img._gestos = true;
+    let d0 = 0, cx = 0, cy = 0;
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    img.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        d0 = dist(e.touches);
+        cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      }
+    }, { passive: true });
+    img.addEventListener('touchmove', e => {
+      if (e.touches.length === 2 && d0) {
+        const d1 = dist(e.touches);
+        if (Math.abs(d1 - d0) > 40) {
+          const p = DsC.coord(img, cx, cy);
+          if (p) DsC.enviar({ t: 'pinch', x: p.x, y: p.y, escala: d1 > d0 ? 1.2 : 0.8, n: 2 });
+          d0 = d1;
+        }
+        e.preventDefault();
+      }
+    }, { passive: false });
+    img.addEventListener('touchend', e => { if (e.touches.length < 2) d0 = 0; }, { passive: true });
+  }
+  /* ---------- gamepad fisico (item 6) ---------- */
+  if (navigator.getGamepads) {
+    const MAPA = ['Return', 'Escape', 'Tab', 'space', 'Up', 'Down', 'Left', 'Right'];
+    let ant = [];
+    setInterval(() => {
+      const gp = navigator.getGamepads()[0];
+      if (!gp || !window.DsC || !DsC.stream.rodando) return;
+      gp.buttons.forEach((b, i) => {
+        if (b.pressed && !ant[i] && MAPA[i]) DsC.enviar({ t: 'gamepad', tecla: MAPA[i] });
+        ant[i] = b.pressed;
+      });
+      const ex = gp.axes[0] || 0, ey = gp.axes[1] || 0;
+      if (Math.abs(ex) > 0.3 || Math.abs(ey) > 0.3)
+        DsC.enviar({ t: 'trackpad', dx: Math.round(ex * 14), dy: Math.round(ey * 14) });
+    }, 120);
+  }
+})();
