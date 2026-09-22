@@ -1,0 +1,296 @@
+name: ARKHER Sandbox
+
+on:
+  workflow_dispatch:
+  # REDE DE SEGURANCA: se a religacao falhar, o cron sobe de novo
+  schedule:
+    - cron: '0 */5 * * *'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: arkher-sandbox
+  cancel-in-progress: false
+
+jobs:
+  sandbox:
+    runs-on: windows-latest
+    timeout-minutes: 350          # 5h50 — sai ANTES do corte seco de 6h
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------- 0. sem a chave do Tailscale nao adianta continuar ----------
+      - name: Conferir secrets
+        shell: pwsh
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          PAT: ${{ secrets.PAT_TOKEN }}
+        run: |
+          if (-not $env:TS_KEY) {
+            Write-Host "::error::Falta o secret TAILSCALE_AUTH_KEY (Settings > Secrets > Actions). Sem ele a VM sobe mas ninguem alcanca."
+            exit 1
+          }
+          if (-not $env:PAT) {
+            Write-Host "::warning::Sem PAT_TOKEN: a VM NAO vai religar sozinha ao fim das 6h (o GITHUB_TOKEN nao pode disparar workflow). Crie um PAT com escopo 'workflow' e salve como PAT_TOKEN."
+          }
+
+      # ---------- 1. volta o estado da sessao anterior ----------
+      - name: Restaurar estado
+        uses: actions/cache/restore@v4
+        with:
+          path: arkher_state
+          key: arkher-state-${{ github.run_id }}
+          restore-keys: |
+            arkher-state-
+            nexus-state-
+
+      - name: Preparar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path arkher_state\work | Out-Null
+          if (Test-Path arkher_state\SNAPSHOT.json) {
+            Write-Host "=== estado anterior restaurado ==="
+            Get-Content arkher_state\SNAPSHOT.json
+          } else { Write-Host "primeira sessao" }
+          Write-Host "`n=== esta maquina ==="
+          (Get-CimInstance Win32_Processor).Name
+          "RAM: {0} GB" -f [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory/1GB,1)
+          "Disco livre: {0} GB" -f [math]::Round((Get-PSDrive C).Free/1GB,1)
+          python --version
+
+      # ---------- 2. acesso remoto ----------
+      - name: Liberar RDP e as portas do agente e do DsOS
+        shell: pwsh
+        run: |
+          Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0 -Force
+          Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' UserAuthentication 0 -Force
+          Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' SecurityLayer 0 -Force
+          foreach ($r in @('RDP-TS','ARKHER-AGENT','ARKHER-DSOS')) { netsh advfirewall firewall delete rule name=$r 2>$null | Out-Null }
+          netsh advfirewall firewall add rule name="RDP-TS"       dir=in action=allow protocol=TCP localport=3389
+          netsh advfirewall firewall add rule name="ARKHER-AGENT" dir=in action=allow protocol=TCP localport=8765
+          netsh advfirewall firewall add rule name="ARKHER-DSOS"  dir=in action=allow protocol=TCP localport=8766
+          Restart-Service TermService -Force
+
+      - name: Usuario do RDP
+        shell: pwsh
+        run: |
+          $cs=@{U=[char[]](65..90);L=[char[]](97..122);N=[char[]](48..57)}
+          $r=@(); $r+=$cs.U|Get-Random -Count 5; $r+=$cs.L|Get-Random -Count 5; $r+=$cs.N|Get-Random -Count 4
+          $pw=-join ($r|Sort-Object{Get-Random})
+          $sec=ConvertTo-SecureString $pw -AsPlainText -Force
+          New-LocalUser -Name "nexus" -Password $sec -AccountNeverExpires -ErrorAction SilentlyContinue | Out-Null
+          Add-LocalGroupMember -Group "Administrators" -Member "nexus" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "nexus" -ErrorAction SilentlyContinue
+          # NAO use ::add-mask:: aqui: o GitHub trocaria a senha por *** em TODO o log,
+          # inclusive no "COMO ACESSAR" — ou seja, voce nunca conseguiria ler. A senha
+          # aleatoria desta maquina descartavel aparece so no step COMO ACESSAR.
+          echo "RDP_PW=$pw" >> $env:GITHUB_ENV
+
+      - name: Tailscale
+        shell: pwsh
+        env:
+          TS_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          $p="$env:TEMP\ts.msi"
+          Invoke-WebRequest "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $p -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList "/i","`"$p`"","/quiet","/norestart" -Wait
+          Remove-Item $p -Force
+          $ts="$env:ProgramFiles\Tailscale\tailscale.exe"
+          & $ts up --authkey=$env:TS_KEY --hostname=arkher-windows --accept-dns=false
+          $ip=$null;$n=0
+          while(-not $ip -and $n -lt 24){ Start-Sleep 5; $ip=(& $ts ip -4 2>$null | Select-Object -First 1); $n++ }
+          if(-not $ip){ & $ts status; Write-Error "Tailscale sem IP — a chave expirou? (login.tailscale.com/admin/settings/keys, marque Reusable)"; exit 1 }
+          $ip=$ip.Trim()
+          Write-Host "Tailscale IP: $ip"
+          echo "TS_IP=$ip" >> $env:GITHUB_ENV
+
+      # ---------- 3. programas nativos (o ganho do Windows) ----------
+      - name: Instalar Blender, ffmpeg, git
+        continue-on-error: true
+        timeout-minutes: 20
+        shell: pwsh
+        run: |
+          choco install -y blender ffmpeg git 7zip --no-progress --limit-output
+          Write-Host "instalados"
+
+      - name: Instalar Roblox Studio
+        continue-on-error: true
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          # O instalador abre o Studio no fim; NAO usar -Wait (travava o workflow inteiro ate o timeout).
+          try {
+            Invoke-WebRequest "https://setup.rbxcdn.com/RobloxStudioLauncherBeta.exe" `
+              -OutFile "$env:TEMP\studio.exe" -UseBasicParsing
+            Start-Process "$env:TEMP\studio.exe" -ArgumentList "/S"
+            $fim=(Get-Date).AddMinutes(6)
+            do { Start-Sleep 10
+                 $exe=Get-ChildItem "$env:LOCALAPPDATA\Roblox\Versions\*\RobloxStudioBeta.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            } while (-not $exe -and (Get-Date) -lt $fim)
+            if ($exe) { Write-Host "Studio instalado: $($exe.FullName)" } else { Write-Host "Studio: instalador rodou mas o executavel nao apareceu (login/anti-bot?)" }
+            # fecha o Studio que o instalador abriu; o Piloto abre quando precisar
+            Get-Process RobloxStudio* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          } catch { Write-Host "Studio nao instalou: $_" }
+
+      # ---------- SESSAO GRAFICA (sem isso o print sai preto) ----------
+      - name: Ativar sessao grafica para o Piloto
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          # autologon do usuario nexus: cria sessao de console de verdade no proximo logon
+          $k='HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon'
+          Set-ItemProperty $k AutoAdminLogon 1 -Force
+          Set-ItemProperty $k DefaultUserName "nexus" -Force
+          Set-ItemProperty $k DefaultPassword "$env:RDP_PW" -Force
+          # nunca dormir / nunca bloquear a tela
+          powercfg /change monitor-timeout-ac 0
+          powercfg /change standby-timeout-ac 0
+          New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' -Force | Out-Null
+          Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization' NoLockScreen 1 -Force -ErrorAction SilentlyContinue
+          Write-Host "sessoes agora:"
+          quser 2>&1 | Out-String | Write-Host
+
+      # ---------- 4. o agente (8765) e o DsOS Core (8766) ----------
+      - name: Subir agente e DsOS
+        shell: pwsh
+        run: |
+          $env:ARKHER_STATE="$PWD\arkher_state"
+          $env:DSOS_ROOT="$PWD\arkher_state\work"
+          $env:DSOS_BACKEND="windows"
+          # os pesos dos modelos 3D ficam NO ESTADO: assim a proxima sessao de 6h
+          # nao baixa 2 GB de novo (o cache do Actions devolve tudo)
+          $env:ARKHER_RDP_USER="nexus"
+          $env:ARKHER_RDP_PW="$env:RDP_PW"    # o cartao de RDP do site le isso em GET /node
+          $env:HF_HOME="$PWD\arkher_state\hf"
+          New-Item -ItemType Directory -Force -Path $env:HF_HOME | Out-Null
+          Start-Process python -ArgumentList "agent.py" -NoNewWindow -RedirectStandardOutput agent.log -RedirectStandardError agent.err
+          Start-Process python -ArgumentList "dsos_core.py" -NoNewWindow -RedirectStandardOutput dsos.log -RedirectStandardError dsos.err
+          $ok=$false
+          for ($i=0; $i -lt 12 -and -not $ok; $i++) {
+            Start-Sleep 5
+            try { $h=Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 10; $ok=$true } catch {}
+          }
+          if (-not $ok) { Get-Content agent.log,agent.err -ErrorAction SilentlyContinue; Write-Error "agente nao subiu"; exit 1 }
+          Write-Host "agente OK — $($h.cpu) | $($h.ram_gb) GB | $($h.cpu_count) nucleos"
+          try { $d=Invoke-RestMethod "http://127.0.0.1:8766/health" -TimeoutSec 10; Write-Host "DsOS OK — tela: $($d.tela)" }
+          catch { Write-Host "DsOS nao respondeu (a aba DsOS fica indisponivel, o resto funciona):"; Get-Content dsos.log,dsos.err -ErrorAction SilentlyContinue }
+          try { $g=Invoke-RestMethod "http://127.0.0.1:8765/guiready" -TimeoutSec 60; Write-Host "sessao grafica: $($g.ok) $($g.nota)" } catch {}
+
+      # ---------- 6. motores 3D (texto -> .glb) ----------
+      - name: Instalar motor 3D (Shap-E na CPU)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $env:ARKHER_STATE="$PWD\arkher_state"
+          $env:HF_HOME="$PWD\arkher_state\hf"
+          Write-Host "primeira vez: baixa o torch de CPU (~200 MB) + o modelo (~2 GB). Nas proximas sessoes o cache devolve tudo."
+          python gerar3d.py --instalar shape
+          Write-Host "`n=== motores 3D nesta maquina ==="
+          python gerar3d.py --lista
+
+      # ---------- 4b. o no do Kaggle tambem religa (opcional) ----------
+      # Precisa dos secrets KAGGLE_USERNAME e KAGGLE_KEY (kaggle.com > Settings > API).
+      # Sem eles, este passo so avisa e segue — o resto do workflow nao depende dele.
+      - name: Religar o no do Kaggle
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if (-not $env:KAGGLE_USERNAME -or -not $env:KAGGLE_KEY) {
+            Write-Host "sem KAGGLE_USERNAME/KAGGLE_KEY nos secrets — pulando o religador do Kaggle"
+            return
+          }
+          python -m pip install -q --disable-pip-version-check kaggle
+          # --repo aponta pro checkout deste workflow: o notebook vai sempre na versao atual
+          Start-Process -FilePath python -ArgumentList `
+            "religa_kaggle.py","--usuario","$env:KAGGLE_USERNAME","--repo",".","--vigiar","--intervalo","300" `
+            -RedirectStandardOutput "kaggle-religa.log" -NoNewWindow
+          Write-Host "religador do Kaggle rodando em segundo plano (log: kaggle-religa.log)"
+
+      - name: COMO ACESSAR
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "=============== ARKHER PRONTO ==============="
+          Write-Host "  Site > Config > URL do agente:"
+          Write-Host "      http://$env:TS_IP`:8765"
+          Write-Host "  Site > aba DsOS > Conectar:"
+          Write-Host "      http://$env:TS_IP`:8766"
+          Write-Host ""
+          Write-Host "  3D (aba 3D do site):  ja instalado o Shap-E (CPU). Com GPU, instale o TripoSR"
+          Write-Host "  RDP (ver a tela):  $env:TS_IP"
+          Write-Host "      usuario: nexus    senha: $env:RDP_PW"
+          Write-Host ""
+          Write-Host "  Na 1a vez conecte por RDP uma vez (garante a sessao grafica"
+          Write-Host "  pro Piloto). Se o print sair preto: tscon 1 /dest:console"
+          Write-Host "============================================"
+          Write-Host ""
+
+      # ---------- 5. fica vivo e salva de tempos em tempos ----------
+      - name: Manter vivo
+        shell: pwsh
+        run: |
+          $fim=(Get-Date).AddMinutes(335)
+          while((Get-Date) -lt $fim){
+            Start-Sleep 300
+            try { Invoke-RestMethod "http://127.0.0.1:8765/snapshot" -Method Post -Body '{}' -ContentType 'application/json' -TimeoutSec 30 | Out-Null } catch {}
+            $vivo = try { (Invoke-RestMethod "http://127.0.0.1:8765/health" -TimeoutSec 10).ok } catch { $false }
+            if (-not $vivo) {
+              Write-Host "[$(Get-Date -Format HH:mm)] agente caiu — religando"
+              $env:ARKHER_STATE="$PWD\arkher_state"
+              Start-Process python -ArgumentList "agent.py" -NoNewWindow
+            }
+            Write-Host "[$(Get-Date -Format HH:mm)] vivo · http://$env:TS_IP`:8765  (senha RDP: $env:RDP_PW)"
+          }
+          Write-Host "tempo esgotado — salvando"
+
+      # ---------- 6. SALVA TUDO (roda mesmo se algo falhar) ----------
+      - name: Snapshot final
+        if: always()
+        shell: pwsh
+        run: |
+          try { Invoke-RestMethod "http://127.0.0.1:8765/snapshot" -Method Post -Body '{}' -ContentType 'application/json' -TimeoutSec 30 | Out-Null } catch {}
+          # nao guarda print de tela nem lixo no cache
+          Remove-Item arkher_state\shot.jpg,arkher_state\shot.png -ErrorAction SilentlyContinue
+          Write-Host "estado salvo:"
+          Get-ChildItem arkher_state -Recurse | Select-Object FullName,Length | Format-Table
+
+      - name: Guardar estado
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: arkher_state
+          key: arkher-state-${{ github.run_id }}
+
+      # ---------- 7. RELIGA SOZINHO ----------
+      - name: Religar
+        if: always()
+        shell: pwsh
+        env:
+          PAT: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN_FALLBACK: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+        run: |
+          $tk = $env:PAT
+          if (-not $tk) { $tk = $env:GH_TOKEN_FALLBACK; Write-Host "sem PAT_TOKEN — tentando com GITHUB_TOKEN (normalmente NAO tem permissao de disparar workflow; o cron de 5h e a rede de seguranca)" }
+          $h = @{ Authorization="Bearer $tk"; Accept="application/vnd.github+json";
+                  "X-GitHub-Api-Version"="2022-11-28" }
+          $u = "https://api.github.com/repos/$env:REPO/actions/workflows/arkher.yml/dispatches"
+          $body = @{ ref=$env:REF } | ConvertTo-Json
+          for ($i=1; $i -le 3; $i++) {
+            try {
+              Invoke-RestMethod -Uri $u -Method Post -Headers $h -Body $body -ContentType 'application/json'
+              Write-Host "proxima sessao disparada (tentativa $i)"
+              break
+            } catch {
+              Write-Host "tentativa $i falhou: $($_.Exception.Message)"
+              Start-Sleep 10
+            }
+          }
